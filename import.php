@@ -1,5 +1,4 @@
 <?php 
-	session_start();
 	require_once("DebitTaggr.class.php");
 	$debitTaggr = new DebitTaggr();
 ?>
@@ -8,8 +7,6 @@
 	</head>
 	<body>
 <?php
-	$debitTaggr->login("TBD", "TBD"); // TODO : REMOVE THIS!
-
 	if (isset($_FILES["import"]) && isset($_POST["upload"]))
 	{
 		// map : {{"name";...},{"type";...},{"tmp_name";...},{"error";...},{"size";...}}

@@ -2,8 +2,6 @@
 
 // script to introduce splits
 
-session_start();
-
 require_once("DebitTaggr.class.php");
 $debitTaggr = new DebitTaggr();
 
