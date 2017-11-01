@@ -124,8 +124,8 @@ class DebitTaggr
 		$this->disconnectDb();
 		
 		return $debit;
-	}	
-	
+	}
+
 	function getPreviousDebit($currentId)
 	{
 		$debit = array();
@@ -200,18 +200,18 @@ class DebitTaggr
 		$query .= "WHERE id = ".$id." ";
 		$query .= "AND debits_id = ".$debits_id;
 		$result = @mysql_query($query, $this->db);
-		$this->disconnectDb();		
+		$this->disconnectDb();
 	}
-	
+
 	function createSplit($debits_id, $amount, $tags, $notes)
 	{
 		$this->connectDb();
 		$query  = "INSERT INTO splits(debits_id, notes, tags, amount) ";
 		$query .= "VALUES (".$debits_id.",'".$notes."','".$tags."',".$amount.")";
 		$result = @mysql_query($query, $this->db);
-		$this->disconnectDb();		
+		$this->disconnectDb();
 	}
-	
+
 	function import($filePath)
 	{
 		$content = file_get_contents($filePath);
@@ -220,27 +220,27 @@ class DebitTaggr
 		$query = "INSERT INTO debits(amount, description, date, currency) VALUES ";
 
 		/*
-		1	Date d'évaluation
-		2	Relation bancaire
-		3	Portefeuille
-		4	Produit
-		5	IBAN
-		6		Monn.
-		7	Date du
-		8	Date au
-		9		Description
-		10		Date de conclusion
-		11	Date de comptabilisation
-		12	Date de valeur
-		13		Description 1
-		14		Description 2
-		15		Description 3
-		16	N° de transaction
-		17	Cours des devises du montant initial en montant du décompte
-		18	Sous-montant
-		19		Débit
-		20	Crédit
-		21	Solde
+		1   Date d'évaluation
+		2   Relation bancaire
+		3   Portefeuille
+		4   Produit
+		5   IBAN
+		6       Monn.
+		7   Date du
+		8   Date au
+		9       Description
+		10      Date de conclusion
+		11  Date de comptabilisation
+		12  Date de valeur
+		13      Description 1
+		14      Description 2
+		15      Description 3
+		16  N° de transaction
+		17  Cours des devises du montant initial en montant du décompte
+		18  Sous-montant
+		19      Débit
+		20  Crédit
+		21  Solde
 		*/
 		$pattern = "([^;]*);"; // 1st field
 		$full_pattern = "|";
@@ -267,6 +267,165 @@ class DebitTaggr
 			$query .= "($amount, '$description', $date, '$currency'),";
 		}
 
+/* bitches at UBS changed export format (some time between sept. 2011 and aug. 2012)
+			Date d'evaluation
+			Relation bancaire
+			Portefeuille
+			Produit
+			IBAN
+				Monn.
+			Date du
+			Date au
+			Description
+				Date de conclusion
+			Date de comptabilisation
+			Date de valeur
+				Description 1
+				Description 2
+				Description 3
+			Cours des devises du montant initial en montant du decompte
+			Sous-montant
+				Debit
+			Credit
+			Solde
+		
+		$pattern = "([^;]*);";
+		$full_pattern = "|";
+		$nb_fields = 19;
+		for($i=1; $i<$nb_fields; $i++) {
+			$full_pattern .= $pattern;
+		}
+		$full_pattern .= "([^;]*)\n|is";
+		preg_match_all($full_pattern, $content, $matches, PREG_SET_ORDER);
+		foreach($matches as $match)
+		{
+			$date = $match[9];
+			$description = $match[12].' '.$match[13].' '.$match[14];
+			$currency = $match[5];
+			$amount = str_replace("'","", $match[17]);
+			
+			if(!is_numeric($amount)) continue;
+			
+			$date = substr($date, 6, 4).substr($date, 3, 2).substr($date, 0, 2).'000000';
+			$description = addslashes($description);
+			$description = htmlspecialchars($description);
+			$amount *= -100;
+			
+			$query .= "($amount, '$description', $date, '$currency'),";
+		}
+		
+/* bitches at UBS changed export format, AGAIN! (sept. 2011)            
+			Date d'evaluation
+			Relation bancaire
+			Portefeuille
+			Produit
+			IBAN
+				Monn.
+			Date du
+			Date au
+			Description
+				Date de conclusion
+			Date de comptabilisation
+			Date de valeur
+			Saisi par
+			Destinataire
+				Description 1
+				Description 2
+				Description 3
+			Sous-montant
+				Debit
+			Credit
+			Solde
+		
+		$pattern = "([^;]*);";
+		$full_pattern = "|";
+		$nb_fields = 20;
+		for($i=1; $i<$nb_fields; $i++) {
+			$full_pattern .= $pattern;
+		}
+		$full_pattern .= "([^;]*)\n|is";
+		preg_match_all($full_pattern, $content, $matches, PREG_SET_ORDER);
+		foreach($matches as $match)
+		{
+			$date = $match[9];
+			$description = $match[14].' '.$match[15].' '.$match[16];
+			$currency = $match[5];
+			$amount = str_replace("'","", $match[18]);
+			
+			if(!is_numeric($amount)) continue;
+			
+			$date = substr($date, 6, 4).substr($date, 3, 2).substr($date, 0, 2).'000000';
+			$description = addslashes($description);
+			$description = htmlspecialchars($description);
+			$amount *= 100;
+			
+			$query .= "($amount, '$description', $date, '$currency'),";
+		}
+/* bitches at UBS changed export format, AGAIN! (jun. 2010)         
+		
+			Bewertungsdatum
+			Bankbeziehung
+			Portfolio
+			Kundenprodukt
+			IBAN
+				Whrg.
+			Datum von
+			Datum bis
+			Beschreibung
+				Abschlussdatum
+			Buchungsdatum
+			Valuta
+				Beschreibung 1
+				Beschreibung 2
+				Beschreibung 3
+				Belastung
+			Gutschrift
+			Saldo
+		
+		$pattern = "([^;]*);";
+		$full_pattern = "|";
+		$nb_fields = 18;
+		for($i=1; $i<$nb_fields; $i++) {
+			$full_pattern .= $pattern;
+		}
+		$full_pattern .= "([^;]*)\n|is";
+		preg_match_all($full_pattern, $content, $matches, PREG_SET_ORDER);
+		foreach($matches as $match)
+		{
+			$date = $match[10];
+			$description = $match[13].' '.$match[14].' '.$match[15];
+			$currency = $match[6];
+			$amount = str_replace("'","", $match[16]);
+			
+			if(!is_numeric($amount)) continue;
+			
+			$date = substr($date, 6, 4).substr($date, 3, 2).substr($date, 0, 2).'000000';
+			$description = addslashes($description);
+			$description = htmlspecialchars($description);
+			$amount *= -100;
+			
+			$query .= "($amount, '$description', $date, '$currency'),";
+		}
+*/          
+/* bitches at UBS changed export format! (dec. 2008)
+		preg_match_all("|\"([^;]*)\";\"([^;]*)\";\"([^;]*)\";([^;]*);\"([^;]*)\";([^;]*)\n|is", $content, $matches, PREG_SET_ORDER);
+		foreach($matches as $match)
+		{
+			$date = $match[1];
+			$description = $match[2];
+			$currency = $match[3];
+			$amount = $match[4];
+			
+			if(!is_numeric($amount)) continue;
+			
+			$date = substr($date, 6, 4).substr($date, 3, 2).substr($date, 0, 2).'000000';
+			$description = addslashes($description);
+			$description = htmlspecialchars($description);
+			$amount *= 100;
+			
+			$query .= "($amount, '$description', $date, '$currency'),";
+		}
+*/
 		$query = substr($query, 0, strlen($query)-1);
 
 		$result = mysql_query($query, $this->db);
