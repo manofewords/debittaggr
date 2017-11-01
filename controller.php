@@ -54,7 +54,7 @@ function debitXML($debit)
 	$xml .= '<id>'.$debit['id'].'</id>';
 	$xml .= '<amount>'.-($debit['amount']/100).'</amount>';
 	$xml .= '<currency>'.$debit['currency'].'</currency>';
-	$xml .= '<description>'.$debit['description'].'</description>'; // str_replace("\n", '<br/>', $debit['description'])
+	$xml .= '<description>'.str_replace("&", '&amp;', $debit['description']).'</description>'; // str_replace("\n", '<br/>', $debit['description'])
 	$xml .= '<splits>';
 	foreach($debit['splits'] as $split)
 	{
