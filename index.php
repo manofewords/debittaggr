@@ -24,10 +24,6 @@
 		<script type="text/javascript" src="yui/build/connection/connection-min.js"></script>
 		<script type="text/javascript" src="yui/build/calendar/calendar.js"></script>
 		
-		<!-- Slideshow
-		<script type="text/javascript" src="yui-slideshow-0.3/slideshow.js"></script>
-		<link type="text/css" rel="stylesheet"  href="yui-slideshow-0.3/slideshow.css"/>
-		 -->
 		<script>
 			YAHOO.namespace("example.calendar");
 			
