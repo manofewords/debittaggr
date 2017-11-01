@@ -5,7 +5,6 @@ define("DB_USER", "TBD");
 define("DB_PASSWORD", "TBD");
 define("DB_NAME", "TBD");
 
-// TODO: remove, used in index.php
 define('TAG_THRESHOLD_L',   160);
 define('TAG_THRESHOLD_M',   120);
 define('TAG_THRESHOLD_S',   80);
@@ -30,7 +29,7 @@ class DebitTaggr
 
 	function disconnectDb()
 	{
-		mysql_close($this->db);
+		@mysql_close($this->db);
 	}
 
 	function getTagsCount()
@@ -120,7 +119,7 @@ class DebitTaggr
 		if($row = mysql_fetch_array($result, MYSQL_ASSOC))
 		{
 			$debit = $row;
-			$debit['splits'] = $this->_getDebitSplits($debit['id']);
+			$debit['splits'] = $this->getDebitSplits($debit['id']);
 		}
 		$this->disconnectDb();
 		
@@ -141,14 +140,14 @@ class DebitTaggr
 		if($row = mysql_fetch_array($result, MYSQL_ASSOC))
 		{
 			$debit = $row;
-			$debit['splits'] = $this->_getDebitSplits($debit['id']);
+			$debit['splits'] = $this->getDebitSplits($debit['id']);
 		}
 		$this->disconnectDb();
 		
 		return $debit;
 	}
 	
-	function _getDebitSplits($id)
+	function getDebitSplits($id)
 	{
 		$splits = array();
 
@@ -167,7 +166,7 @@ class DebitTaggr
 	}
 	
 	function updateDebit($debit_id, $debit_amount, $split_notes, $split_tags, $split_id, $split_amount)
-	{				
+	{
 		for($i = 0; $i < count($split_notes); $i++)
 		{
 			$amount = $split_amount[$i];
@@ -186,12 +185,12 @@ class DebitTaggr
 			
 			$id = $split_id[$i];
 			
-			if(strlen($id)) $this->_updateSplit($id, $debit_id, $amount, $tags, $notes);
-			else $this->_createSplit($debit_id, $amount, $tags, $notes);
+			if(strlen($id)) $this->updateSplit($id, $debit_id, $amount, $tags, $notes);
+			else $this->createSplit($debit_id, $amount, $tags, $notes);
 		}
 	}
 	
-	function _updateSplit($id, $debits_id, $amount, $tags, $notes)
+	function updateSplit($id, $debits_id, $amount, $tags, $notes)
 	{
 		$this->connectDb();
 		$query  = "UPDATE splits ";
@@ -204,7 +203,7 @@ class DebitTaggr
 		$this->disconnectDb();		
 	}
 	
-	function _createSplit($debits_id, $amount, $tags, $notes)
+	function createSplit($debits_id, $amount, $tags, $notes)
 	{
 		$this->connectDb();
 		$query  = "INSERT INTO splits(debits_id, notes, tags, amount) ";
@@ -219,7 +218,7 @@ class DebitTaggr
 		
 		$this->connectDb();
 		$query = "INSERT INTO debits(amount, description, date, currency) VALUES ";
-		
+
 		/*
 		1	Date d'évaluation
 		2	Relation bancaire
@@ -263,8 +262,6 @@ class DebitTaggr
 			
 			$date = substr($date, 6, 4).substr($date, 3, 2).substr($date, 0, 2).'000000'; // in: 10.08.2012, out: 20120810000000
 			$description = addslashes($description);
-			$description = htmlspecialchars($description);
-
 			$amount *= -100;
 
 			$query .= "($amount, '$description', $date, '$currency'),";
