@@ -48,7 +48,7 @@ echo $content;
 
 function debitXML($debit)
 {
-	$xml  = '<?xml version="1.0" ?>';
+	$xml  = '<?xml version="1.0" encoding="UTF-8"?>';
 	$xml .= '<debits>';
 	$xml .= '<debit>';
 	$xml .= '<id>'.$debit['id'].'</id>';
