@@ -90,7 +90,7 @@
         padding: var(--spacing);
         margin: 0;
       }
-      #graph {
+      .graph {
         overflow: scroll;
       }
     </style>
@@ -167,23 +167,24 @@
           onchange="drawTagGraphAndStatistics(this.value)"
         ></select>
       </form>
-      <section id="tag-statistics">
+      <section>
+        <h2>Statistics</h2>
         <dl>
           <dt>Daily average</dt>
           <dd id="daily-statistics"></dd>
         </dl>
-        <dl>
-          <dt>Monthly</dt>
-          <dd>
-            <details>
-              <summary>Averages</summary>
-              <dl id="monthly-statistics"></dl>
-            </details>
-          </dd>
-        </dl>
       </section>
-      <section id="graph">
-        <svg id="tag-graph">
+      <section class="graph">
+        <h2>Monthly graph</h2>
+        <svg id="monthly-tag-graph">
+          <defs>
+            <rect fill="green"><title></title></rect>
+          </defs>
+        </svg>
+      </section>
+      <section class="graph">
+        <h2>Daily graph</h2>
+        <svg id="daily-tag-graph">
           <defs>
             <rect fill="green"><title></title></rect>
           </defs>
@@ -220,7 +221,18 @@
       const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
       const appState = {
-        debits: [], // of { description: string, date: string, amount: string, currency: string, splits: { notes: string, amount: string, tags: string[] }[] }
+        // {
+        //   description: string, // usually containing newlines \n
+        //   date: string, // "2004-09-23"
+        //   amount: string, // "12340" in cents
+        //   currency: string, // "CHF"
+        //   splits: {
+        //     notes: string,
+        //     amount: string, // "12340" in cents
+        //     tags: string[] // ["FOOD", "RENT"]
+        //   }[]
+        // }
+        debits: [],
         tags: new Set(), // of string
         currentIndex: -1,
         tagCounts: {}, // { tag: string, count: number }
@@ -336,7 +348,12 @@
         ).sort(sortByDate);
 
         displayTagStatistics(debits, splits);
-        drawTagGraph(splits);
+
+        let svg = document.querySelector("#monthly-tag-graph");
+        drawMonthlyTagGraph(svg, debits, splits);
+
+        svg = document.querySelector("#daily-tag-graph");
+        drawTagGraph(svg, splits);
       }
 
       function displayTagStatistics(debits, splits) {
@@ -354,50 +371,76 @@
         }, 0);
         const dailyAmount = Math.round(totalAmount / daysCount / 100);
         document.querySelector("#daily-statistics").textContent = dailyAmount;
-
-        // TODO: do all months, not just the ones in splits
-
-        const monthlyAverages = Object.values(
-          splits.reduce((monthlyAverages, split) => {
-            const month = split.date.substring(0, 7);
-            if (monthlyAverages[month]) {
-              monthlyAverages[month].amount += split.amount;
-            } else {
-              monthlyAverages[month] = {
-                date: month,
-                amount: split.amount,
-              };
-            }
-            return monthlyAverages;
-          }, {})
-        ).sort(sortByDate);
-        const monthlyStatistics = document.querySelector("#monthly-statistics");
-        monthlyStatistics.textContent = "";
-        const termDetailsTemplate = document.querySelector("#term-details");
-        for (const monthlyAverage of monthlyAverages) {
-          const termDetailsClone = termDetailsTemplate.content.cloneNode(true);
-          termDetailsClone.querySelector("dt").textContent =
-            monthlyAverage.date;
-          termDetailsClone.querySelector("dd").textContent = Math.round(
-            monthlyAverage.amount / 100
-          );
-          monthlyStatistics.appendChild(termDetailsClone);
-        }
       }
 
-      function drawTagGraph(splits) {
-        if (splits.length < 2) {
+      function drawMonthlyTagGraph(svg, debits, splits) {
+        if (debits.length < 2 || splits.length < 2) {
           return;
         }
 
-        const DAY_WIDTH_IN_PIXELS = 5;
+        const startDate = debits[0].date;
+        const endDate = debits[debits.length - 1].date;
+
+        const startYear = Number(startDate.substring(0, 4));
+        const endYear = Number(endDate.substring(0, 4));
+
+        const monthlySplits = {};
+        for (let i = 0; i <= endYear - startYear; i += 1) {
+          for (let j = 1; j < 13; j += 1) {
+            const month = `${startYear + i}-${String(j).padStart(2, "0")}`;
+            monthlySplits[month] = {
+              date: month,
+              amount: 0,
+            };
+          }
+        }
+        for (const split of splits) {
+          const month = split.date.substring(0, 7);
+          monthlySplits[month].amount += split.amount;
+        }
+
+        drawTagGraph(svg, Object.values(monthlySplits));
+      }
+
+      function drawTagGraph(svg, splits) {
+        if (!svg || splits.length < 2) {
+          return;
+        }
+
+        const GRAPH_BAR_WIDTH_IN_PIXELS = 5;
         const CENTS_HEIGHT_IN_PIXELS = 0.01; // 1 CHF = 1 pixel
 
-        const startTimestamp = Date.parse(splits[0].date);
-        const endTimestamp = Date.parse(splits[splits.length - 1].date);
+        let startDate = splits[0].date;
 
-        function timestampToPixels(timestamp) {
-          return (timestamp / MILLISECONDS_PER_DAY) * DAY_WIDTH_IN_PIXELS;
+        let dateToPixels;
+        let svgWidth;
+        if (startDate.length === 10) {
+          // daily mode: splits is a sparse list, i.e. there are days for which there is no split in splits
+
+          let endDate = splits[splits.length - 1].date;
+
+          const startTimestamp = Date.parse(startDate);
+          const endTimestamp = Date.parse(endDate);
+
+          function timestampToPixels(timestamp) {
+            return (
+              (timestamp / MILLISECONDS_PER_DAY) * GRAPH_BAR_WIDTH_IN_PIXELS
+            );
+          }
+
+          svgWidth =
+            timestampToPixels(endTimestamp - startTimestamp) +
+            GRAPH_BAR_WIDTH_IN_PIXELS;
+
+          dateToPixels = (index, date) =>
+            timestampToPixels(Date.parse(date) - startTimestamp);
+        } else if (startDate.length === 7) {
+          // monthly mode: there is a split in splits for each month
+
+          svgWidth = splits.length * GRAPH_BAR_WIDTH_IN_PIXELS;
+          dateToPixels = (index, date) => index * GRAPH_BAR_WIDTH_IN_PIXELS;
+        } else {
+          return;
         }
 
         function amountToPixels(amount) {
@@ -411,12 +454,7 @@
           return maxAmount;
         }, 0);
 
-        const svgWidth =
-          timestampToPixels(endTimestamp - startTimestamp) +
-          DAY_WIDTH_IN_PIXELS;
         const svgHeight = amountToPixels(maxAmount);
-
-        const svg = document.querySelector("#tag-graph");
 
         svg
           .querySelectorAll("& > rect")
@@ -427,10 +465,12 @@
         svg.style.width = svgWidth + "px";
         svg.style.height = svgHeight + "px";
 
-        for (const split of splits) {
-          const x = timestampToPixels(Date.parse(split.date) - startTimestamp);
+        for (let i = 0; i < splits.length; i += 1) {
+          const split = splits[i];
+
+          const x = dateToPixels(i, split.date);
           const y = amountToPixels(maxAmount - split.amount);
-          const width = DAY_WIDTH_IN_PIXELS;
+          const width = GRAPH_BAR_WIDTH_IN_PIXELS;
           const height = amountToPixels(split.amount);
 
           const rect = svg.querySelector("defs > rect").cloneNode(true);
@@ -442,7 +482,7 @@
 
           rect.querySelector("title").textContent =
             split.amount / 100 +
-            (split.notes.length ? " = " + split.notes.join(" + ") : "");
+            (split.notes?.length ? " = " + split.notes.join(" + ") : "");
 
           svg.appendChild(rect);
         }
