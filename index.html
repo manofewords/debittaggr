@@ -280,16 +280,16 @@
         // {
         //   description: string, // usually containing newlines \n
         //   date: string, // "2004-09-23"
-        //   amount: string, // "12340" in cents
+        //   amount: string, // "12340", in cents
         //   currency: string, // "CHF"
         //   splits: {
         //     notes: string,
-        //     amount: string, // "12340" in cents
+        //     amount: string, // "12340", in cents
         //     tags: string[] // ["FOOD", "RENT"]
         //   }[]
         // }
         debits: [],
-        tags: new Set(), // of string
+        tags: new Set(), // ["FOOD", "RENT"]
         currentIndex: -1,
         tagCounts: {}, // { tag: string, count: number }
       };
@@ -301,6 +301,7 @@
       function updateAppState(key, value) {
         appState[key] = value;
 
+        // count usage of each tag in the debit splits
         appState.tagCounts = Object.values(
           appState.debits.reduce((tagCounts, debit) => {
             for (const split of debit.splits) {
@@ -317,10 +318,11 @@
         ).sort((a, b) => b.count - a.count);
 
         updateAndDisplayOverallStatistics(appState.debits, appState.tagCounts);
+
         updateTagSelector(appState.tagCounts);
       }
 
-      function sortByDate(a, b) {
+      function sortByAscendingDate(a, b) {
         if (a.date < b.date) {
           return -1;
         } else if (a.date > b.date) {
@@ -330,13 +332,16 @@
       }
 
       function updateTagSelector(tagCounts) {
+        // clear <select>'s <option>s
         const select = document.querySelector("#tag");
         select.textContent = "";
 
         const tagOptionTemplate = document.querySelector("#tag-option");
 
+        // create <select>'s <option>s
         for (const tagCount of tagCounts) {
           const tagOptionClone = tagOptionTemplate.content.cloneNode(true);
+
           const option = tagOptionClone.querySelector("option");
           option.textContent = tagCount.tag;
           option.setAttribute("value", tagCount.tag);
@@ -344,6 +349,7 @@
           select.appendChild(tagOptionClone);
         }
 
+        // show graph and statistics of most used tag by default
         drawTagGraphAndStatistics(tagCounts[0].tag);
       }
 
@@ -382,6 +388,12 @@
       function drawTagGraphAndStatistics(tag) {
         const debits = readAppState("debits");
 
+        // all the splits for the given tag:
+        // {
+        //   date: string, // "2023-04-11"
+        //   amount: number, // in cents
+        //   notes: string[] // ["note 1", "note 2"]
+        // }[]
         const splits = Object.values(
           debits.reduce((splits, debit) => {
             for (const split of debit.splits) {
@@ -402,7 +414,7 @@
             }
             return splits;
           }, {})
-        ).sort(sortByDate);
+        ).sort(sortByAscendingDate);
 
         let svg = document.querySelector("#monthly-tag-graph");
         drawMonthlyTagGraphAndStatistics(svg, debits, splits);
@@ -436,6 +448,11 @@
           const month = split.date.substring(0, 7);
           monthlySplitsMap[month].amount += split.amount;
         }
+        // total amount of all splits for a month:
+        // {
+        //   date: string, // "2021-04"
+        //   amount: number // in cents
+        // }[]
         const monthlySplits = Object.values(monthlySplitsMap);
 
         drawTagGraph(svg, monthlySplits);
@@ -444,6 +461,11 @@
       }
 
       function drawMonthlyTagStatistics(splits) {
+        // monthly average for each year:
+        // {
+        //   year: string, // "2018"
+        //   amount: number // in cents
+        // }[]
         const monthlyAveragesByYear = Object.values(
           splits.reduce((monthlyAveragesByYear, split) => {
             const year = split.date.substring(0, 4);
@@ -462,11 +484,14 @@
         const tableBody = document.querySelector(
           "table#monthly-averages > tbody"
         );
+
+        // clear the table content
         tableBody.innerHTML = "";
 
         const monthlyTableRowTemplate =
           document.querySelector("#monthly-table-row");
 
+        // add 1 row per year to the table
         for (const monthlyAverageByYear of monthlyAveragesByYear) {
           const monthlyTableRowClone =
             monthlyTableRowTemplate.content.cloneNode(true);
@@ -493,10 +518,11 @@
 
         let startDate = splits[0].date;
 
-        let dateToPixels;
-        let svgWidth;
-        let xAxisLabels;
-        let yAxisResolutionInCHF;
+        let dateToPixels; // function allowing to convert a date string to an x value for the graph
+        let svgWidth; // pixel width of the SVG graph
+        let xAxisLabels; // Set() of string representing all x-axis labels
+        let yAxisResolutionInCHF; // a horizontal line will be drawn at each multiple of this y value
+
         if (startDate.length === 10) {
           // daily mode: splits is a sparse list, i.e. there are days for which there is no split in splits
 
@@ -561,8 +587,10 @@
         svg.style.width = svgWidth + "px";
         svg.style.height = svgHeight + "px";
 
+        // clear previous x-axis labels
         svg.querySelectorAll("& > g.x-axis").forEach((g) => svg.removeChild(g));
         const labels = Array.from(xAxisLabels);
+        // draw x-axis labels
         for (let i = 0; i < labels.length; i += 1) {
           const label = labels[i];
 
@@ -592,7 +620,9 @@
           svg.appendChild(g);
         }
 
+        // clear previous y-axis labels and lines
         svg.querySelectorAll("& > g.y-axis").forEach((g) => svg.removeChild(g));
+        // draw y-axis labels and lines
         for (
           let i = 1;
           i < Math.ceil(maxAmount / (yAxisResolutionInCHF * CENTS_IN_ONE_CHF));
@@ -618,9 +648,11 @@
           svg.appendChild(g);
         }
 
+        // clear previous graph
         svg
           .querySelectorAll("& > rect")
           .forEach((rect) => svg.removeChild(rect));
+        // draw graph, 1 <rect> per split
         for (let i = 0; i < splits.length; i += 1) {
           const split = splits[i];
 
@@ -870,7 +902,7 @@
 
         updateAppState("tags", tags);
 
-        const sortedDebits = debits.sort(sortByDate);
+        const sortedDebits = debits.sort(sortByAscendingDate);
 
         let index = sortedDebits.findIndex(
           (debit) => debit.splits.length === 0
