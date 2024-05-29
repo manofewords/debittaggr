@@ -6,6 +6,7 @@
     <style>
       :root {
         --spacing: 0.5rem;
+        --table-border: 1px solid gray;
       }
       body {
         font-family: system-ui, sans-serif;
@@ -108,6 +109,18 @@
           font-size: 12px;
         }
       }
+      table {
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        border: var(--table-border);
+        padding: 0.25rem;
+      }
+      th {
+        text-align: left;
+        border-bottom-width: 2px;
+      }
     </style>
   </head>
   <body>
@@ -183,11 +196,16 @@
         ></select>
       </form>
       <section>
-        <h2>Statistics</h2>
-        <dl>
-          <dt>Daily average</dt>
-          <dd id="daily-statistics"></dd>
-        </dl>
+        <h2>Monthly averages</h2>
+        <table id="monthly-averages">
+          <thead>
+            <tr>
+              <th>Year</th>
+              <th>Monthly average</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </section>
       <section class="graph">
         <h2>Monthly graph</h2>
@@ -247,6 +265,12 @@
     </template>
     <template id="tag-option">
       <option></option>
+    </template>
+    <template id="monthly-table-row">
+      <tr>
+        <td></td>
+        <td></td>
+      </tr>
     </template>
     <script>
       const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -380,35 +404,14 @@
           }, {})
         ).sort(sortByDate);
 
-        displayTagStatistics(debits, splits);
-
         let svg = document.querySelector("#monthly-tag-graph");
-        drawMonthlyTagGraph(svg, debits, splits);
+        drawMonthlyTagGraphAndStatistics(svg, debits, splits);
 
         svg = document.querySelector("#daily-tag-graph");
         drawTagGraph(svg, splits);
       }
 
-      function displayTagStatistics(debits, splits) {
-        if (debits.length < 2 || splits.length < 2) {
-          return;
-        }
-
-        const startTimestamp = Date.parse(debits[0].date);
-        const endTimestamp = Date.parse(debits[debits.length - 1].date);
-        const daysCount =
-          (endTimestamp - startTimestamp) / MILLISECONDS_PER_DAY;
-        const totalAmount = splits.reduce((totalAmount, split) => {
-          totalAmount += split.amount;
-          return totalAmount;
-        }, 0);
-        const dailyAmount = Math.round(
-          totalAmount / daysCount / CENTS_IN_ONE_CHF
-        );
-        document.querySelector("#daily-statistics").textContent = dailyAmount;
-      }
-
-      function drawMonthlyTagGraph(svg, debits, splits) {
+      function drawMonthlyTagGraphAndStatistics(svg, debits, splits) {
         if (debits.length < 2 || splits.length < 2) {
           return;
         }
@@ -419,11 +422,11 @@
         const startYear = Number(startDate.substring(0, 4));
         const endYear = Number(endDate.substring(0, 4));
 
-        const monthlySplits = {};
+        const monthlySplitsMap = {};
         for (let i = 0; i <= endYear - startYear; i += 1) {
           for (let j = 1; j < 13; j += 1) {
             const month = `${startYear + i}-${String(j).padStart(2, "0")}`;
-            monthlySplits[month] = {
+            monthlySplitsMap[month] = {
               date: month,
               amount: 0,
             };
@@ -431,10 +434,51 @@
         }
         for (const split of splits) {
           const month = split.date.substring(0, 7);
-          monthlySplits[month].amount += split.amount;
+          monthlySplitsMap[month].amount += split.amount;
         }
+        const monthlySplits = Object.values(monthlySplitsMap);
 
-        drawTagGraph(svg, Object.values(monthlySplits));
+        drawTagGraph(svg, monthlySplits);
+
+        drawMonthlyTagStatistics(monthlySplits);
+      }
+
+      function drawMonthlyTagStatistics(splits) {
+        const monthlyAveragesByYear = Object.values(
+          splits.reduce((monthlyAveragesByYear, split) => {
+            const year = split.date.substring(0, 4);
+            if (monthlyAveragesByYear[year]) {
+              monthlyAveragesByYear[year].amount += split.amount;
+            } else {
+              monthlyAveragesByYear[year] = {
+                year,
+                amount: split.amount,
+              };
+            }
+            return monthlyAveragesByYear;
+          }, {})
+        );
+
+        const tableBody = document.querySelector(
+          "table#monthly-averages > tbody"
+        );
+        tableBody.innerHTML = "";
+
+        const monthlyTableRowTemplate =
+          document.querySelector("#monthly-table-row");
+
+        for (const monthlyAverageByYear of monthlyAveragesByYear) {
+          const monthlyTableRowClone =
+            monthlyTableRowTemplate.content.cloneNode(true);
+
+          const cells = monthlyTableRowClone.querySelectorAll("td");
+          cells[0].textContent = monthlyAverageByYear.year;
+          cells[1].textContent = Math.round(
+            monthlyAverageByYear.amount / CENTS_IN_ONE_CHF / 12
+          );
+
+          tableBody.appendChild(monthlyTableRowClone);
+        }
       }
 
       function drawTagGraph(svg, splits) {
@@ -530,7 +574,10 @@
           line.setAttribute("x1", x);
           line.setAttribute("y1", amountToPixels(maxAmount));
           line.setAttribute("x2", x);
-          line.setAttribute("y2", amountToPixels(maxAmount) + AXIS_TEXT_MARGIN_IN_PIXELS);
+          line.setAttribute(
+            "y2",
+            amountToPixels(maxAmount) + AXIS_TEXT_MARGIN_IN_PIXELS
+          );
 
           const text = g.querySelector("text");
           text.setAttribute("x", x);
