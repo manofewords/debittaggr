@@ -93,6 +93,21 @@
       .graph {
         overflow: scroll;
       }
+      svg {
+        position: relative;
+        rect {
+          fill: green;
+          opacity: 0.9;
+        }
+        line {
+          stroke: grey;
+          stroke-width: 1;
+          stroke-dasharray: 5;
+        }
+        text {
+          font-size: 12px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -178,7 +193,15 @@
         <h2>Monthly graph</h2>
         <svg id="monthly-tag-graph">
           <defs>
-            <rect fill="green"><title></title></rect>
+            <rect><title></title></rect>
+            <g class="y-axis">
+              <line />
+              <text />
+            </g>
+            <g class="x-axis">
+              <line />
+              <text />
+            </g>
           </defs>
         </svg>
       </section>
@@ -186,7 +209,15 @@
         <h2>Daily graph</h2>
         <svg id="daily-tag-graph">
           <defs>
-            <rect fill="green"><title></title></rect>
+            <rect><title></title></rect>
+            <g class="y-axis">
+              <line />
+              <text />
+            </g>
+            <g class="x-axis">
+              <line />
+              <text />
+            </g>
           </defs>
         </svg>
       </section>
@@ -219,6 +250,7 @@
     </template>
     <script>
       const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+      const CENTS_IN_ONE_CHF = 100;
 
       const appState = {
         // {
@@ -309,7 +341,8 @@
         document.querySelector("#splits-count").textContent = splitsCount;
 
         document.querySelector("#splits-per-debit").textContent =
-          Math.round((splitsCount / debitsCount) * 100) / 100;
+          Math.round((splitsCount / debitsCount) * CENTS_IN_ONE_CHF) /
+          CENTS_IN_ONE_CHF;
 
         const tagCountsContainer = document.querySelector("#tag-counts");
         tagCountsContainer.textContent = "";
@@ -369,7 +402,9 @@
           totalAmount += split.amount;
           return totalAmount;
         }, 0);
-        const dailyAmount = Math.round(totalAmount / daysCount / 100);
+        const dailyAmount = Math.round(
+          totalAmount / daysCount / CENTS_IN_ONE_CHF
+        );
         document.querySelector("#daily-statistics").textContent = dailyAmount;
       }
 
@@ -409,11 +444,15 @@
 
         const GRAPH_BAR_WIDTH_IN_PIXELS = 5;
         const CENTS_HEIGHT_IN_PIXELS = 0.01; // 1 CHF = 1 pixel
+        const AXIS_TEXT_MARGIN_IN_PIXELS = 2;
+        const AXIS_TEXT_SIZE_IN_PIXELS = 12; // SVG text size in CSS
 
         let startDate = splits[0].date;
 
         let dateToPixels;
         let svgWidth;
+        let xAxisLabels;
+        let yAxisResolutionInCHF;
         if (startDate.length === 10) {
           // daily mode: splits is a sparse list, i.e. there are days for which there is no split in splits
 
@@ -432,12 +471,27 @@
             timestampToPixels(endTimestamp - startTimestamp) +
             GRAPH_BAR_WIDTH_IN_PIXELS;
 
+          xAxisLabels = splits.reduce((xAxisLabels, split) => {
+            xAxisLabels.add(split.date.substring(0, 7));
+            return xAxisLabels;
+          }, new Set());
+
+          yAxisResolutionInCHF = 50;
+
           dateToPixels = (index, date) =>
             timestampToPixels(Date.parse(date) - startTimestamp);
         } else if (startDate.length === 7) {
           // monthly mode: there is a split in splits for each month
 
           svgWidth = splits.length * GRAPH_BAR_WIDTH_IN_PIXELS;
+
+          xAxisLabels = splits.reduce((xAxisLabels, split) => {
+            xAxisLabels.add(split.date.substring(0, 4));
+            return xAxisLabels;
+          }, new Set());
+
+          yAxisResolutionInCHF = 100;
+
           dateToPixels = (index, date) => index * GRAPH_BAR_WIDTH_IN_PIXELS;
         } else {
           return;
@@ -454,17 +508,72 @@
           return maxAmount;
         }, 0);
 
-        const svgHeight = amountToPixels(maxAmount);
-
-        svg
-          .querySelectorAll("& > rect")
-          .forEach((rect) => svg.removeChild(rect));
+        const svgHeight =
+          amountToPixels(maxAmount) +
+          (AXIS_TEXT_SIZE_IN_PIXELS + AXIS_TEXT_MARGIN_IN_PIXELS);
 
         svg.setAttribute("width", svgWidth);
         svg.setAttribute("height", svgHeight);
         svg.style.width = svgWidth + "px";
         svg.style.height = svgHeight + "px";
 
+        svg.querySelectorAll("& > g.x-axis").forEach((g) => svg.removeChild(g));
+        const labels = Array.from(xAxisLabels);
+        for (let i = 0; i < labels.length; i += 1) {
+          const label = labels[i];
+
+          const g = svg.querySelector("defs > g.x-axis").cloneNode(true);
+
+          const x = dateToPixels(i * 12, `${label}-01`);
+
+          const line = g.querySelector("line");
+          line.setAttribute("x1", x);
+          line.setAttribute("y1", amountToPixels(maxAmount));
+          line.setAttribute("x2", x);
+          line.setAttribute("y2", amountToPixels(maxAmount) + AXIS_TEXT_MARGIN_IN_PIXELS);
+
+          const text = g.querySelector("text");
+          text.setAttribute("x", x);
+          text.setAttribute(
+            "y",
+            amountToPixels(maxAmount) +
+              AXIS_TEXT_SIZE_IN_PIXELS +
+              AXIS_TEXT_MARGIN_IN_PIXELS
+          );
+          text.textContent = label;
+
+          svg.appendChild(g);
+        }
+
+        svg.querySelectorAll("& > g.y-axis").forEach((g) => svg.removeChild(g));
+        for (
+          let i = 1;
+          i < Math.ceil(maxAmount / (yAxisResolutionInCHF * CENTS_IN_ONE_CHF));
+          i += 1
+        ) {
+          const g = svg.querySelector("defs > g.y-axis").cloneNode(true);
+
+          const y = amountToPixels(
+            maxAmount - i * (yAxisResolutionInCHF * CENTS_IN_ONE_CHF)
+          );
+
+          const line = g.querySelector("line");
+          line.setAttribute("x1", 0);
+          line.setAttribute("y1", y);
+          line.setAttribute("x2", svgWidth);
+          line.setAttribute("y2", y);
+
+          const text = g.querySelector("text");
+          text.setAttribute("x", 0);
+          text.setAttribute("y", y - AXIS_TEXT_MARGIN_IN_PIXELS);
+          text.textContent = i * yAxisResolutionInCHF;
+
+          svg.appendChild(g);
+        }
+
+        svg
+          .querySelectorAll("& > rect")
+          .forEach((rect) => svg.removeChild(rect));
         for (let i = 0; i < splits.length; i += 1) {
           const split = splits[i];
 
@@ -481,7 +590,7 @@
           rect.setAttribute("height", height);
 
           rect.querySelector("title").textContent =
-            split.amount / 100 +
+            split.amount / CENTS_IN_ONE_CHF +
             (split.notes?.length ? " = " + split.notes.join(" + ") : "");
 
           svg.appendChild(rect);
