@@ -432,7 +432,7 @@
       }
 
       function drawMonthlyTagsGraphAndStatistics(svg, debits, splits) {
-        if (debits.length < 2 || splits.length < 2) {
+        if (debits.length < 1 || splits.length < 1) {
           return;
         }
 
@@ -515,7 +515,7 @@
       }
 
       function drawTagsGraph(svg, splits) {
-        if (!svg || splits.length < 2) {
+        if (!svg || splits.length < 1) {
           return;
         }
 
