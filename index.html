@@ -185,14 +185,15 @@
         </dd>
       </dl>
     </aside>
-    <aside id="by-tag">
-      <h1>By tag</h1>
+    <aside id="by-tags">
+      <h1>By tags</h1>
       <form>
-        <label for="tag">Tag</label>
+        <label for="tags">Tags</label>
         <select
-          id="tag"
-          name="tag"
-          onchange="drawTagGraphAndStatistics(this.value)"
+          id="tags"
+          name="tags"
+          multiple
+          onchange="drawTagsGraphAndStatistics(this.selectedOptions)"
         ></select>
       </form>
       <section>
@@ -209,7 +210,7 @@
       </section>
       <section class="graph">
         <h2>Monthly graph</h2>
-        <svg id="monthly-tag-graph">
+        <svg id="monthly-tags-graph">
           <defs>
             <rect><title></title></rect>
             <g class="y-axis">
@@ -225,7 +226,7 @@
       </section>
       <section class="graph">
         <h2>Daily graph</h2>
-        <svg id="daily-tag-graph">
+        <svg id="daily-tags-graph">
           <defs>
             <rect><title></title></rect>
             <g class="y-axis">
@@ -333,24 +334,27 @@
 
       function updateTagSelector(tagCounts) {
         // clear <select>'s <option>s
-        const select = document.querySelector("#tag");
+        const select = document.querySelector("#tags");
         select.textContent = "";
 
         const tagOptionTemplate = document.querySelector("#tag-option");
 
         // create <select>'s <option>s
-        for (const tagCount of tagCounts) {
+        for (let i = 0; i < tagCounts.length; i += 1) {
           const tagOptionClone = tagOptionTemplate.content.cloneNode(true);
 
           const option = tagOptionClone.querySelector("option");
-          option.textContent = tagCount.tag;
-          option.setAttribute("value", tagCount.tag);
+          option.textContent = tagCounts[i].tag;
+          option.setAttribute("value", tagCounts[i].tag);
+          if (i === 0) {
+            option.setAttribute("selected", "selected");
+          }
 
           select.appendChild(tagOptionClone);
         }
 
         // show graph and statistics of most used tag by default
-        drawTagGraphAndStatistics(tagCounts[0].tag);
+        drawTagsGraphAndStatistics([{ value: tagCounts[0].tag }]);
       }
 
       function updateAndDisplayOverallStatistics(debits, tagCounts) {
@@ -385,10 +389,11 @@
         }
       }
 
-      function drawTagGraphAndStatistics(tag) {
+      function drawTagsGraphAndStatistics(selectedTags) {
+        const tags = Array.from(selectedTags).map(({ value }) => value);
         const debits = readAppState("debits");
 
-        // all the splits for the given tag:
+        // all the splits for the given tags:
         // {
         //   date: string, // "2023-04-11"
         //   amount: number, // in cents
@@ -397,7 +402,10 @@
         const splits = Object.values(
           debits.reduce((splits, debit) => {
             for (const split of debit.splits) {
-              if (split.tags.includes(tag)) {
+              const splitIncludesTags = split.tags.every((splitTag) =>
+                tags.includes(splitTag)
+              );
+              if (splitIncludesTags) {
                 if (splits[debit.date]) {
                   splits[debit.date].amount += Number(split.amount);
                   if (split.notes) {
@@ -416,14 +424,14 @@
           }, {})
         ).sort(sortByAscendingDate);
 
-        let svg = document.querySelector("#monthly-tag-graph");
-        drawMonthlyTagGraphAndStatistics(svg, debits, splits);
+        let svg = document.querySelector("#monthly-tags-graph");
+        drawMonthlyTagsGraphAndStatistics(svg, debits, splits);
 
-        svg = document.querySelector("#daily-tag-graph");
-        drawTagGraph(svg, splits);
+        svg = document.querySelector("#daily-tags-graph");
+        drawTagsGraph(svg, splits);
       }
 
-      function drawMonthlyTagGraphAndStatistics(svg, debits, splits) {
+      function drawMonthlyTagsGraphAndStatistics(svg, debits, splits) {
         if (debits.length < 2 || splits.length < 2) {
           return;
         }
@@ -455,7 +463,7 @@
         // }[]
         const monthlySplits = Object.values(monthlySplitsMap);
 
-        drawTagGraph(svg, monthlySplits);
+        drawTagsGraph(svg, monthlySplits);
 
         drawMonthlyTagStatistics(monthlySplits);
       }
@@ -506,7 +514,7 @@
         }
       }
 
-      function drawTagGraph(svg, splits) {
+      function drawTagsGraph(svg, splits) {
         if (!svg || splits.length < 2) {
           return;
         }
@@ -884,12 +892,12 @@
         if (debits.length === 0) {
           document.querySelector("#debit").style.display = "none";
           document.querySelector("#statistics").style.display = "none";
-          document.querySelector("#by-tag").style.display = "none";
+          document.querySelector("#by-tags").style.display = "none";
           return;
         }
         document.querySelector("#debit").style.display = "flex";
         document.querySelector("#statistics").style.display = "flex";
-        document.querySelector("#by-tag").style.display = "flex";
+        document.querySelector("#by-tags").style.display = "flex";
 
         const tags = debits.reduce((tags, debit) => {
           for (const split of debit.splits) {
