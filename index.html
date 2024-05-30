@@ -393,68 +393,66 @@
         const tags = Array.from(selectedTags).map(({ value }) => value);
         const debits = readAppState("debits");
 
+        const startTimestamp = Date.parse(debits[0].date);
+        const endTimestamp = Date.parse(debits[debits.length - 1].date);
+        const daysCount =
+          (endTimestamp - startTimestamp) / MILLISECONDS_PER_DAY;
+
+        const splitsMap = {};
+        for (let i = 0; i <= daysCount; i += 1) {
+          const date = new Date(startTimestamp + i * MILLISECONDS_PER_DAY)
+            .toISOString()
+            .substring(0, 10);
+          splitsMap[date] = {
+            date,
+            amount: 0,
+            notes: [],
+          };
+        }
+        for (const debit of debits) {
+          for (const split of debit.splits) {
+            const splitIncludesTags = split.tags.every((splitTag) =>
+              tags.includes(splitTag)
+            );
+            if (splitIncludesTags) {
+              splitsMap[debit.date].amount += Number(split.amount);
+              if (split.notes) {
+                splitsMap[debit.date].notes.push(split.notes);
+              }
+            }
+          }
+        }
         // all the splits for the given tags:
         // {
         //   date: string, // "2023-04-11"
         //   amount: number, // in cents
         //   notes: string[] // ["note 1", "note 2"]
         // }[]
-        const splits = Object.values(
-          debits.reduce((splits, debit) => {
-            for (const split of debit.splits) {
-              const splitIncludesTags = split.tags.every((splitTag) =>
-                tags.includes(splitTag)
-              );
-              if (splitIncludesTags) {
-                if (splits[debit.date]) {
-                  splits[debit.date].amount += Number(split.amount);
-                  if (split.notes) {
-                    splits[debit.date].notes.push(split.notes);
-                  }
-                } else {
-                  splits[debit.date] = {
-                    date: debit.date,
-                    amount: Number(split.amount),
-                    notes: split.notes ? [split.notes] : [],
-                  };
-                }
-              }
-            }
-            return splits;
-          }, {})
-        ).sort(sortByAscendingDate);
+        const splits = Object.values(splitsMap);
 
         let svg = document.querySelector("#monthly-tags-graph");
-        drawMonthlyTagsGraphAndStatistics(svg, debits, splits);
+        drawMonthlyTagsGraphAndStatistics(svg, splits);
 
         svg = document.querySelector("#daily-tags-graph");
         drawTagsGraph(svg, splits);
       }
 
-      function drawMonthlyTagsGraphAndStatistics(svg, debits, splits) {
-        if (debits.length < 1 || splits.length < 1) {
+      function drawMonthlyTagsGraphAndStatistics(svg, splits) {
+        if (splits.length < 1) {
           return;
         }
 
-        const startDate = debits[0].date;
-        const endDate = debits[debits.length - 1].date;
-
-        const startYear = Number(startDate.substring(0, 4));
-        const endYear = Number(endDate.substring(0, 4));
-
         const monthlySplitsMap = {};
-        for (let i = 0; i <= endYear - startYear; i += 1) {
-          for (let j = 1; j < 13; j += 1) {
-            const month = `${startYear + i}-${String(j).padStart(2, "0")}`;
-            monthlySplitsMap[month] = {
-              date: month,
-              amount: 0,
-            };
-          }
-        }
         for (const split of splits) {
           const month = split.date.substring(0, 7);
-          monthlySplitsMap[month].amount += split.amount;
+          if (monthlySplitsMap[month]) {
+            monthlySplitsMap[month].amount += split.amount;
+          } else {
+            monthlySplitsMap[month] = {
+              date: month,
+              amount: split.amount,
+            };
+          }
         }
         // total amount of all splits for a month:
         // {
@@ -524,55 +522,45 @@
         const AXIS_TEXT_MARGIN_IN_PIXELS = 2;
         const AXIS_TEXT_SIZE_IN_PIXELS = 12; // SVG text size in CSS
 
-        let startDate = splits[0].date;
-
-        let dateToPixels; // function allowing to convert a date string to an x value for the graph
-        let svgWidth; // pixel width of the SVG graph
-        let xAxisLabels; // Set() of string representing all x-axis labels
+        let xAxisLabels; // { label: string, index: number }[] where index is the index of the label in splits
         let yAxisResolutionInCHF; // a horizontal line will be drawn at each multiple of this y value
-
+        let startDate = splits[0].date;
         if (startDate.length === 10) {
-          // daily mode: splits is a sparse list, i.e. there are days for which there is no split in splits
-
-          let endDate = splits[splits.length - 1].date;
-
-          const startTimestamp = Date.parse(startDate);
-          const endTimestamp = Date.parse(endDate);
-
-          function timestampToPixels(timestamp) {
-            return (
-              (timestamp / MILLISECONDS_PER_DAY) * GRAPH_BAR_WIDTH_IN_PIXELS
-            );
-          }
-
-          svgWidth =
-            timestampToPixels(endTimestamp - startTimestamp) +
-            GRAPH_BAR_WIDTH_IN_PIXELS;
-
-          xAxisLabels = splits.reduce((xAxisLabels, split) => {
-            xAxisLabels.add(split.date.substring(0, 7));
-            return xAxisLabels;
-          }, new Set());
-
+          // daily mode
+          xAxisLabels = Object.values(
+            splits.reduce((xAxisLabels, split, index) => {
+              const label = split.date.substring(0, 7); // year + month
+              if (!xAxisLabels[label]) {
+                xAxisLabels[label] = {
+                  label,
+                  index,
+                };
+              }
+              return xAxisLabels;
+            }, {})
+          );
           yAxisResolutionInCHF = 50;
-
-          dateToPixels = (index, date) =>
-            timestampToPixels(Date.parse(date) - startTimestamp);
         } else if (startDate.length === 7) {
-          // monthly mode: there is a split in splits for each month
-
-          svgWidth = splits.length * GRAPH_BAR_WIDTH_IN_PIXELS;
-
-          xAxisLabels = splits.reduce((xAxisLabels, split) => {
-            xAxisLabels.add(split.date.substring(0, 4));
-            return xAxisLabels;
-          }, new Set());
-
+          // monthly mode
+          xAxisLabels = Object.values(
+            splits.reduce((xAxisLabels, split, index) => {
+              const label = split.date.substring(0, 4); // year
+              if (!xAxisLabels[label]) {
+                xAxisLabels[label] = {
+                  label,
+                  index,
+                };
+              }
+              return xAxisLabels;
+            }, {})
+          );
           yAxisResolutionInCHF = 100;
-
-          dateToPixels = (index, date) => index * GRAPH_BAR_WIDTH_IN_PIXELS;
         } else {
           return;
+        }
+
+        function dateToPixels(index) {
+          return index * GRAPH_BAR_WIDTH_IN_PIXELS;
         }
 
         function amountToPixels(amount) {
@@ -586,6 +574,7 @@
           return maxAmount;
         }, 0);
 
+        const svgWidth = splits.length * GRAPH_BAR_WIDTH_IN_PIXELS;
         const svgHeight =
           amountToPixels(maxAmount) +
           (AXIS_TEXT_SIZE_IN_PIXELS + AXIS_TEXT_MARGIN_IN_PIXELS);
@@ -597,14 +586,13 @@
 
         // clear previous x-axis labels
         svg.querySelectorAll("& > g.x-axis").forEach((g) => svg.removeChild(g));
-        const labels = Array.from(xAxisLabels);
         // draw x-axis labels
-        for (let i = 0; i < labels.length; i += 1) {
-          const label = labels[i];
+        for (let i = 0; i < xAxisLabels.length; i += 1) {
+          const { index, label } = xAxisLabels[i];
 
           const g = svg.querySelector("defs > g.x-axis").cloneNode(true);
 
-          const x = dateToPixels(i * 12, `${label}-01`);
+          const x = dateToPixels(index);
 
           const line = g.querySelector("line");
           line.setAttribute("x1", x);
@@ -664,7 +652,7 @@
         for (let i = 0; i < splits.length; i += 1) {
           const split = splits[i];
 
-          const x = dateToPixels(i, split.date);
+          const x = dateToPixels(i);
           const y = amountToPixels(maxAmount - split.amount);
           const width = GRAPH_BAR_WIDTH_IN_PIXELS;
           const height = amountToPixels(split.amount);
