@@ -704,7 +704,9 @@
 
       function exportToJsonFile() {
         const debits = readAppState("debits");
-        const filename = "debittaggr.json";
+        const filename = `debittaggr-${
+          new Date().toISOString().split(".")[0]
+        }.json`;
         const href = `data:text/json;charset=utf-8,${encodeURIComponent(
           JSON.stringify(debits, null, 2)
         )}`;
