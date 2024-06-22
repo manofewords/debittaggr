@@ -293,7 +293,7 @@
         debits: [],
         tags: new Set(), // ["FOOD", "RENT"]
         currentIndex: -1,
-        tagCounts: {}, // { tag: string, count: number }
+        tagCounts: [], // { tag: string, count: number }
       };
 
       function readAppState(key) {
@@ -318,6 +318,8 @@
             return tagCounts;
           }, {})
         ).sort((a, b) => b.count - a.count);
+
+        appState.tags = new Set(appState.tagCounts.map(({ tag }) => tag));
 
         updateAndDisplayOverallStatistics(appState.debits, appState.tagCounts);
 
@@ -890,17 +892,6 @@
         document.querySelector("#statistics").style.display = "flex";
         document.querySelector("#by-tags").style.display = "flex";
 
-        const tags = debits.reduce((tags, debit) => {
-          for (const split of debit.splits) {
-            for (const tag of split.tags) {
-              tags.add(tag);
-            }
-          }
-          return tags;
-        }, new Set());
-
-        updateAppState("tags", tags);
-
         const sortedDebits = debits.sort(sortByAscendingDate);
 
         let index = sortedDebits.findIndex(
@@ -911,6 +902,8 @@
         }
 
         updateAppState("currentIndex", index);
+
+        const tags = readAppState("tags");
 
         loadDebitIntoForm(debits[index], tags);
       }
