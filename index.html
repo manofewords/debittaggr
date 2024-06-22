@@ -412,9 +412,9 @@
         }
         for (const debit of debits) {
           for (const split of debit.splits) {
-            const splitIncludesTags = split.tags.every((splitTag) =>
-              tags.includes(splitTag)
-            );
+            const splitIncludesTags =
+              split.tags.length > 0 &&
+              split.tags.every((splitTag) => tags.includes(splitTag));
             if (splitIncludesTags) {
               splitsMap[debit.date].amount += Number(split.amount);
               if (split.notes) {
