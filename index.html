@@ -473,17 +473,21 @@
         // monthly average for each year:
         // {
         //   year: string, // "2018"
-        //   amount: number // in cents
+        //   amount: number, // in cents
+        //   months: Set<string> // ["01", "02", …]
         // }[]
         const monthlyAveragesByYear = Object.values(
           splits.reduce((monthlyAveragesByYear, split) => {
             const year = split.date.substring(0, 4);
+            const month = split.date.substring(5, 7);
             if (monthlyAveragesByYear[year]) {
               monthlyAveragesByYear[year].amount += split.amount;
+              monthlyAveragesByYear[year].months.add(month);
             } else {
               monthlyAveragesByYear[year] = {
                 year,
                 amount: split.amount,
+                months: new Set([month]),
               };
             }
             return monthlyAveragesByYear;
@@ -508,7 +512,9 @@
           const cells = monthlyTableRowClone.querySelectorAll("td");
           cells[0].textContent = monthlyAverageByYear.year;
           cells[1].textContent = Math.round(
-            monthlyAverageByYear.amount / CENTS_IN_ONE_CHF / 12
+            monthlyAverageByYear.amount /
+              CENTS_IN_ONE_CHF /
+              monthlyAverageByYear.months.size
           );
 
           tableBody.appendChild(monthlyTableRowClone);
