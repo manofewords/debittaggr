@@ -470,27 +470,27 @@
       }
 
       function drawMonthlyTagStatistics(splits) {
-        // monthly average for each year:
+        // total amount for each year:
         // {
         //   year: string, // "2018"
         //   amount: number, // in cents
         //   months: Set<string> // ["01", "02", …]
         // }[]
-        const monthlyAveragesByYear = Object.values(
-          splits.reduce((monthlyAveragesByYear, split) => {
+        const amountsByYear = Object.values(
+          splits.reduce((amountsByYear, split) => {
             const year = split.date.substring(0, 4);
             const month = split.date.substring(5, 7);
-            if (monthlyAveragesByYear[year]) {
-              monthlyAveragesByYear[year].amount += split.amount;
-              monthlyAveragesByYear[year].months.add(month);
+            if (amountsByYear[year]) {
+              amountsByYear[year].amount += split.amount;
+              amountsByYear[year].months.add(month);
             } else {
-              monthlyAveragesByYear[year] = {
+              amountsByYear[year] = {
                 year,
                 amount: split.amount,
                 months: new Set([month]),
               };
             }
-            return monthlyAveragesByYear;
+            return amountsByYear;
           }, {})
         );
 
@@ -505,17 +505,17 @@
           document.querySelector("#monthly-table-row");
 
         // add 1 row per year to the table
-        for (const monthlyAverageByYear of monthlyAveragesByYear) {
+        for (const amountByYear of amountsByYear) {
+          const monthlyAverage = Math.round(
+            amountByYear.amount / CENTS_IN_ONE_CHF / amountByYear.months.size
+          );
+
           const monthlyTableRowClone =
             monthlyTableRowTemplate.content.cloneNode(true);
 
           const cells = monthlyTableRowClone.querySelectorAll("td");
-          cells[0].textContent = monthlyAverageByYear.year;
-          cells[1].textContent = Math.round(
-            monthlyAverageByYear.amount /
-              CENTS_IN_ONE_CHF /
-              monthlyAverageByYear.months.size
-          );
+          cells[0].textContent = amountByYear.year;
+          cells[1].textContent = monthlyAverage;
 
           tableBody.appendChild(monthlyTableRowClone);
         }
