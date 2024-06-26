@@ -736,22 +736,28 @@
 
         return rows
           .map((row) => {
-            const values = row.split(delimiter);
-            if (values.length !== 21) {
+            const unescaped = row
+              .replaceAll(
+                /"""(.+?)""";/g,
+                (match, p1) => p1.replaceAll(delimiter, " ") + delimiter
+              )
+              .replaceAll(/"(.+?)";/g, (match, p1) => p1 + delimiter);
+            const values = unescaped.split(delimiter);
+            if (values.length !== 15) {
               return null;
             }
-            const amount = values[18].replaceAll("'", "").replaceAll(".", "");
+            const amount = values[5]
+              .replaceAll("'", "")
+              .replaceAll(".", "")
+              .replaceAll("-", "");
             if (amount === "") {
               return null;
             }
-            const [day, month, year] = values[9].split(".");
             return {
               amount,
-              description: [values[8], values[12], values[13], values[14]].join(
-                " "
-              ),
-              date: [year, month, day].join("-"),
-              currency: values[5],
+              description: [values[10], values[11], values[12]].join(" "),
+              date: values[0],
+              currency: values[4],
               splits: [],
             };
           })
