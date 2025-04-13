@@ -378,8 +378,7 @@
         document.querySelector("#splits-count").textContent = splitsCount;
 
         document.querySelector("#splits-per-debit").textContent =
-          Math.round((splitsCount / debitsCount) * CENTS_IN_ONE_CHF) /
-          CENTS_IN_ONE_CHF;
+          Math.round((splitsCount / debitsCount) * 100) / 100;
 
         const tagCountsContainer = document.querySelector("#tag-counts");
         tagCountsContainer.textContent = "";
