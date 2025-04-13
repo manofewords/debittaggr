@@ -735,12 +735,10 @@
 
         return rows
           .map((row) => {
-            const unescaped = row
-              .replaceAll(
-                /"""(.+?)""";/g,
-                (match, p1) => p1.replaceAll(delimiter, " ") + delimiter
-              )
-              .replaceAll(/"(.+?)";/g, (match, p1) => p1 + delimiter);
+            const unescaped = row.replaceAll(
+              /"(.+?)";/g,
+              (match, p1) => p1.replaceAll(delimiter, " ") + delimiter
+            );
             const values = unescaped.split(delimiter);
             if (values.length !== 15) {
               return null;
