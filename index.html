@@ -187,7 +187,7 @@
         </dd>
       </dl>
     </aside>
-    <aside id="by-tags">
+    <aside id="by-tags-or-keywords">
       <h1>By tags or keywords</h1>
       <p>
         Find debits with given keywords in their description, or with splits
@@ -199,14 +199,14 @@
           id="tags"
           name="tags"
           multiple
-          onchange="drawTagsGraphAndStatistics(this.selectedOptions, document.querySelector('#keywords').value)"
+          onchange="drawGraphAndStatistics(this.selectedOptions, document.querySelector('#keywords').value)"
         ></select>
         <label for="keywords">Keywords</label>
         <input
           id="keywords"
           name="keywords"
           type="text"
-          onblur="drawTagsGraphAndStatistics(document.querySelector('#tags').selectedOptions, this.value)"
+          onblur="drawGraphAndStatistics(document.querySelector('#tags').selectedOptions, this.value)"
         />
       </form>
       <section>
@@ -223,7 +223,7 @@
       </section>
       <section class="graph">
         <h2>Monthly graph</h2>
-        <svg id="monthly-tags-graph">
+        <svg id="monthly-graph">
           <defs>
             <rect><title></title></rect>
             <g class="y-axis">
@@ -239,7 +239,7 @@
       </section>
       <section class="graph">
         <h2>Daily graph</h2>
-        <svg id="daily-tags-graph">
+        <svg id="daily-graph">
           <defs>
             <rect><title></title></rect>
             <g class="y-axis">
@@ -347,7 +347,7 @@
         return 0;
       }
 
-      function appendTagOptionToTagSelector(text, value, selected = false) {
+      function appendOptionToTagSelector(text, value, selected = false) {
         const select = document.querySelector("#tags");
         const tagOptionTemplate = document.querySelector("#tag-option");
 
@@ -367,11 +367,11 @@
         const select = document.querySelector("#tags");
         select.textContent = "";
 
-        appendTagOptionToTagSelector("- NO TAG -", "");
+        appendOptionToTagSelector("- NO TAG -", "");
 
         // create <select>'s <option>s
         for (let i = 0; i < tagCounts.length; i += 1) {
-          appendTagOptionToTagSelector(
+          appendOptionToTagSelector(
             tagCounts[i].tag,
             tagCounts[i].tag,
             i === 0
@@ -379,7 +379,7 @@
         }
 
         // show graph and statistics of most used tag by default
-        drawTagsGraphAndStatistics([{ value: tagCounts[0].tag }]);
+        drawGraphAndStatistics([{ value: tagCounts[0].tag }]);
       }
 
       function updateAndDisplayOverallStatistics(debits, tagCounts) {
@@ -413,7 +413,7 @@
         }
       }
 
-      function drawTagsGraphAndStatistics(selectedTags, selectedKeywords = "") {
+      function drawGraphAndStatistics(selectedTags, selectedKeywords = "") {
         const tags = Array.from(selectedTags)
           .map(({ value }) => value)
           .filter((tag) => !!tag);
@@ -457,7 +457,7 @@
             }
           }
         }
-        // all the splits for the given tags:
+        // all the splits for the given tags or keywords:
         // {
         //   date: string, // "2023-04-11"
         //   amount: number, // in cents
@@ -465,14 +465,14 @@
         // }[]
         const splits = Object.values(splitsMap);
 
-        let svg = document.querySelector("#monthly-tags-graph");
-        drawMonthlyTagsGraphAndStatistics(svg, splits);
+        let svg = document.querySelector("#monthly-graph");
+        drawMonthlyGraphAndStatistics(svg, splits);
 
-        svg = document.querySelector("#daily-tags-graph");
-        drawTagsGraph(svg, splits);
+        svg = document.querySelector("#daily-graph");
+        drawGraph(svg, splits);
       }
 
-      function drawMonthlyTagsGraphAndStatistics(svg, splits) {
+      function drawMonthlyGraphAndStatistics(svg, splits) {
         if (splits.length < 1) {
           return;
         }
@@ -501,12 +501,12 @@
         // }[]
         const monthlySplits = Object.values(monthlySplitsMap);
 
-        drawTagsGraph(svg, monthlySplits);
+        drawGraph(svg, monthlySplits);
 
-        drawMonthlyTagStatistics(monthlySplits);
+        drawMonthlyStatistics(monthlySplits);
       }
 
-      function drawMonthlyTagStatistics(splits) {
+      function drawMonthlyStatistics(splits) {
         // total amount for each year:
         // {
         //   year: string, // "2018"
@@ -558,7 +558,7 @@
         }
       }
 
-      function drawTagsGraph(svg, splits) {
+      function drawGraph(svg, splits) {
         if (!svg || splits.length < 1) {
           return;
         }
@@ -934,12 +934,12 @@
         if (debits.length === 0) {
           document.querySelector("#debit").style.display = "none";
           document.querySelector("#statistics").style.display = "none";
-          document.querySelector("#by-tags").style.display = "none";
+          document.querySelector("#by-tags-or-keywords").style.display = "none";
           return;
         }
         document.querySelector("#debit").style.display = "flex";
         document.querySelector("#statistics").style.display = "flex";
-        document.querySelector("#by-tags").style.display = "flex";
+        document.querySelector("#by-tags-or-keywords").style.display = "flex";
 
         const sortedDebits = debits.sort(sortByAscendingDate);
 
