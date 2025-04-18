@@ -87,6 +87,9 @@
         padding: 0;
         list-style-type: none;
       }
+      ul.split-tags {
+        columns: 2;
+      }
       fieldset {
         border: 1px dotted #999;
         padding: var(--spacing);
@@ -261,7 +264,7 @@
         <label for="split-n-notes">Notes</label>
         <textarea id="split-n-notes" name="split-n-notes"></textarea>
         <label>Tags</label>
-        <ul id="split-n-tags">
+        <ul id="split-n-tags" class="split-tags">
           <li><input name="split-n-new-tags" type="text" /></li>
         </ul>
         <button type="button">Delete</button>
