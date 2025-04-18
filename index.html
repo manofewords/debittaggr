@@ -418,7 +418,7 @@
               split.tags.every((splitTag) => tags.includes(splitTag));
             if (splitIncludesTags) {
               splitsMap[debit.date].amount += Number(split.amount);
-              if (split.notes) {
+              if (split.notes.length > 0) {
                 splitsMap[debit.date].notes.push(split.notes);
               }
             }
@@ -449,10 +449,14 @@
           const month = split.date.substring(0, 7);
           if (monthlySplitsMap[month]) {
             monthlySplitsMap[month].amount += split.amount;
+            if (split.notes.length > 0) {
+              monthlySplitsMap[month].notes.push(split.notes);
+            }
           } else {
             monthlySplitsMap[month] = {
               date: month,
               amount: split.amount,
+              notes: split.notes,
             };
           }
         }
@@ -460,6 +464,7 @@
         // {
         //   date: string, // "2021-04"
         //   amount: number // in cents
+        //   notes: string[] // ["note 1", "note 2"]
         // }[]
         const monthlySplits = Object.values(monthlySplitsMap);
 
@@ -674,7 +679,9 @@
 
           rect.querySelector("title").textContent =
             split.amount / CENTS_IN_ONE_CHF +
-            (split.notes?.length ? " = " + split.notes.join(" + ") : "");
+            (split.notes?.length
+              ? " = " + split.notes.filter((note) => !!note).join(" + ")
+              : "");
 
           svg.appendChild(rect);
         }
