@@ -97,6 +97,7 @@
       }
       svg {
         position: relative;
+        overflow: auto;
         rect {
           fill: green;
           opacity: 0.9;
@@ -187,15 +188,26 @@
       </dl>
     </aside>
     <aside id="by-tags">
-      <h1>By tags</h1>
+      <h1>By tags or keywords</h1>
+      <p>
+        Find debits with given keywords in their description, or with splits
+        tagged with the given tag.
+      </p>
       <form>
         <label for="tags">Tags</label>
         <select
           id="tags"
           name="tags"
           multiple
-          onchange="drawTagsGraphAndStatistics(this.selectedOptions)"
+          onchange="drawTagsGraphAndStatistics(this.selectedOptions, document.querySelector('#keywords').value)"
         ></select>
+        <label for="keywords">Keywords</label>
+        <input
+          id="keywords"
+          name="keywords"
+          type="text"
+          onblur="drawTagsGraphAndStatistics(document.querySelector('#tags').selectedOptions, this.value)"
+        />
       </form>
       <section>
         <h2>Monthly averages</h2>
@@ -335,25 +347,35 @@
         return 0;
       }
 
+      function appendTagOptionToTagSelector(text, value, selected = false) {
+        const select = document.querySelector("#tags");
+        const tagOptionTemplate = document.querySelector("#tag-option");
+
+        const tagOptionClone = tagOptionTemplate.content.cloneNode(true);
+        const option = tagOptionClone.querySelector("option");
+        option.textContent = text;
+        option.setAttribute("value", value);
+        if (selected) {
+          option.setAttribute("selected", "selected");
+        }
+
+        select.appendChild(tagOptionClone);
+      }
+
       function updateTagSelector(tagCounts) {
         // clear <select>'s <option>s
         const select = document.querySelector("#tags");
         select.textContent = "";
 
-        const tagOptionTemplate = document.querySelector("#tag-option");
+        appendTagOptionToTagSelector("- NO TAG -", "");
 
         // create <select>'s <option>s
         for (let i = 0; i < tagCounts.length; i += 1) {
-          const tagOptionClone = tagOptionTemplate.content.cloneNode(true);
-
-          const option = tagOptionClone.querySelector("option");
-          option.textContent = tagCounts[i].tag;
-          option.setAttribute("value", tagCounts[i].tag);
-          if (i === 0) {
-            option.setAttribute("selected", "selected");
-          }
-
-          select.appendChild(tagOptionClone);
+          appendTagOptionToTagSelector(
+            tagCounts[i].tag,
+            tagCounts[i].tag,
+            i === 0
+          );
         }
 
         // show graph and statistics of most used tag by default
@@ -391,8 +413,14 @@
         }
       }
 
-      function drawTagsGraphAndStatistics(selectedTags) {
-        const tags = Array.from(selectedTags).map(({ value }) => value);
+      function drawTagsGraphAndStatistics(selectedTags, selectedKeywords = "") {
+        const tags = Array.from(selectedTags)
+          .map(({ value }) => value)
+          .filter((tag) => !!tag);
+        const keywords = selectedKeywords
+          .toLowerCase()
+          .split(" ")
+          .filter((keyword) => !!keyword);
         const debits = readAppState("debits");
 
         const startTimestamp = Date.parse(debits[0].date);
@@ -412,11 +440,16 @@
           };
         }
         for (const debit of debits) {
+          const description = debit.description.toLowerCase();
+          const debitIncludesKeywords =
+            keywords.length > 0 &&
+            keywords.some((keyword) => description.includes(keyword));
           for (const split of debit.splits) {
             const splitIncludesTags =
+              tags.length > 0 &&
               split.tags.length > 0 &&
               split.tags.every((splitTag) => tags.includes(splitTag));
-            if (splitIncludesTags) {
+            if (splitIncludesTags || debitIncludesKeywords) {
               splitsMap[debit.date].amount += Number(split.amount);
               if (split.notes.length > 0) {
                 splitsMap[debit.date].notes.push(split.notes);
