@@ -318,9 +318,18 @@
       function updateAppState(key, value) {
         appState[key] = value;
 
-        // count usage of each tag in the debit splits
-        appState.tagCounts = Object.values(
-          appState.debits.reduce((tagCounts, debit) => {
+        appState.tagCounts = getTagCounts(appState.debits);
+        appState.tags = new Set(appState.tagCounts.map(({ tag }) => tag));
+
+        updateAndDisplayOverallStatistics(appState.debits, appState.tagCounts);
+
+        updateTagSelector(appState.tagCounts);
+      }
+
+      // count usage of each tag in the debit splits
+      function getTagCounts(debits) {
+        return Object.values(
+          debits.reduce((tagCounts, debit) => {
             for (const split of debit.splits) {
               for (const tag of split.tags) {
                 if (tagCounts[tag]) {
@@ -333,12 +342,6 @@
             return tagCounts;
           }, {})
         ).sort((a, b) => b.count - a.count);
-
-        appState.tags = new Set(appState.tagCounts.map(({ tag }) => tag));
-
-        updateAndDisplayOverallStatistics(appState.debits, appState.tagCounts);
-
-        updateTagSelector(appState.tagCounts);
       }
 
       function sortByAscendingDate(a, b) {
@@ -416,16 +419,13 @@
         }
       }
 
-      function drawGraphAndStatistics(selectedTags, selectedKeywords = "") {
-        const tags = Array.from(selectedTags)
-          .map(({ value }) => value)
-          .filter((tag) => !!tag);
-        const keywords = selectedKeywords
-          .toLowerCase()
-          .split(" ")
-          .filter((keyword) => !!keyword);
-        const debits = readAppState("debits");
-
+      // all the splits for the given tags or keywords:
+      // {
+      //   date: string, // "2023-04-11"
+      //   amount: number, // in cents
+      //   notes: string[] // ["note 1", "note 2"]
+      // }[]
+      function getDailyGraphData(debits, keywords, tags) {
         const startTimestamp = Date.parse(debits[0].date);
         const endTimestamp = Date.parse(debits[debits.length - 1].date);
         const daysCount =
@@ -460,79 +460,97 @@
             }
           }
         }
-        // all the splits for the given tags or keywords:
-        // {
-        //   date: string, // "2023-04-11"
-        //   amount: number, // in cents
-        //   notes: string[] // ["note 1", "note 2"]
-        // }[]
-        const splits = Object.values(splitsMap);
-
-        let svg = document.querySelector("#monthly-graph");
-        drawMonthlyGraphAndStatistics(svg, splits);
-
-        svg = document.querySelector("#daily-graph");
-        drawGraph(svg, splits);
+        return Object.values(splitsMap);
       }
 
-      function drawMonthlyGraphAndStatistics(svg, splits) {
-        if (splits.length < 1) {
-          return;
-        }
-
+      // total amount of all splits for a month:
+      // {
+      //   date: string, // "2021-04"
+      //   amount: number // in cents
+      //   notes: string[] // ["note 1", "note 2"]
+      // }[]
+      function getMonthlyGraphData(dailyGraphData) {
         const monthlySplitsMap = {};
-        for (const split of splits) {
-          const month = split.date.substring(0, 7);
+        for (const graphData of dailyGraphData) {
+          const month = graphData.date.substring(0, 7);
           if (monthlySplitsMap[month]) {
-            monthlySplitsMap[month].amount += split.amount;
-            if (split.notes.length > 0) {
-              monthlySplitsMap[month].notes.push(split.notes);
+            monthlySplitsMap[month].amount += graphData.amount;
+            if (graphData.notes.length > 0) {
+              monthlySplitsMap[month].notes.push(...graphData.notes);
             }
           } else {
             monthlySplitsMap[month] = {
               date: month,
-              amount: split.amount,
-              notes: split.notes,
+              amount: graphData.amount,
+              notes: graphData.notes,
             };
           }
         }
-        // total amount of all splits for a month:
-        // {
-        //   date: string, // "2021-04"
-        //   amount: number // in cents
-        //   notes: string[] // ["note 1", "note 2"]
-        // }[]
-        const monthlySplits = Object.values(monthlySplitsMap);
-
-        drawGraph(svg, monthlySplits);
-
-        drawMonthlyStatistics(monthlySplits);
+        return Object.values(monthlySplitsMap);
       }
 
-      function drawMonthlyStatistics(splits) {
-        // total amount for each year:
-        // {
-        //   year: string, // "2018"
-        //   amount: number, // in cents
-        //   months: Set<string> // ["01", "02", …]
-        // }[]
-        const amountsByYear = Object.values(
-          splits.reduce((amountsByYear, split) => {
-            const year = split.date.substring(0, 4);
-            const month = split.date.substring(5, 7);
+      function drawGraphAndStatistics(
+        selectedTagOptions,
+        selectedKeywords = ""
+      ) {
+        const tags = Array.from(selectedTagOptions)
+          .map(({ value }) => value)
+          .filter((tag) => !!tag);
+        const keywords = selectedKeywords
+          .toLowerCase()
+          .split(" ")
+          .filter((keyword) => !!keyword);
+        const debits = readAppState("debits");
+
+        const dailyGraphData = getDailyGraphData(debits, keywords, tags);
+
+        let svg = document.querySelector("#monthly-graph");
+        drawMonthlyGraphAndStatistics(svg, dailyGraphData);
+
+        svg = document.querySelector("#daily-graph");
+        drawGraph(svg, dailyGraphData);
+      }
+
+      function drawMonthlyGraphAndStatistics(svg, dailyGraphData) {
+        if (dailyGraphData.length < 1) {
+          return;
+        }
+
+        const monthlyGraphData = getMonthlyGraphData(dailyGraphData);
+
+        drawGraph(svg, monthlyGraphData);
+
+        drawMonthlyStatistics(monthlyGraphData);
+      }
+
+      // total amount for each year:
+      // {
+      //   year: string, // "2018"
+      //   amount: number, // in cents
+      //   months: Set<string> // ["01", "02", …]
+      // }[]
+      function getAmountsByYear(monthlyGraphData) {
+        return Object.values(
+          monthlyGraphData.reduce((amountsByYear, graphData) => {
+            const year = graphData.date.substring(0, 4);
+            const month = graphData.date.substring(5, 7);
             if (amountsByYear[year]) {
-              amountsByYear[year].amount += split.amount;
+              amountsByYear[year].amount += graphData.amount;
               amountsByYear[year].months.add(month);
             } else {
               amountsByYear[year] = {
                 year,
-                amount: split.amount,
+                amount: graphData.amount,
                 months: new Set([month]),
               };
             }
             return amountsByYear;
           }, {})
         );
+      }
+
+      function drawMonthlyStatistics(monthlyGraphData) {
+        const amountsByYear = getAmountsByYear(monthlyGraphData);
 
         const tableBody = document.querySelector(
           "table#monthly-averages > tbody"
@@ -561,8 +579,8 @@
         }
       }
 
-      function drawGraph(svg, splits) {
-        if (!svg || splits.length < 1) {
+      function drawGraph(svg, graphData) {
+        if (!svg || graphData.length < 1) {
           return;
         }
 
@@ -573,12 +591,12 @@
 
         let xAxisLabels; // { label: string, index: number }[] where index is the index of the label in splits
         let yAxisResolutionInCHF; // a horizontal line will be drawn at each multiple of this y value
-        let startDate = splits[0].date;
+        let startDate = graphData[0].date;
         if (startDate.length === 10) {
           // daily mode
           xAxisLabels = Object.values(
-            splits.reduce((xAxisLabels, split, index) => {
-              const label = split.date.substring(0, 7); // year + month
+            graphData.reduce((xAxisLabels, { date }, index) => {
+              const label = date.substring(0, 7); // year + month
               if (!xAxisLabels[label]) {
                 xAxisLabels[label] = {
                   label,
@@ -592,8 +610,8 @@
         } else if (startDate.length === 7) {
           // monthly mode
           xAxisLabels = Object.values(
-            splits.reduce((xAxisLabels, split, index) => {
-              const label = split.date.substring(0, 4); // year
+            graphData.reduce((xAxisLabels, { date }, index) => {
+              const label = date.substring(0, 4); // year
               if (!xAxisLabels[label]) {
                 xAxisLabels[label] = {
                   label,
@@ -616,14 +634,14 @@
           return amount * CENTS_HEIGHT_IN_PIXELS;
         }
 
-        const maxAmount = splits.reduce((maxAmount, split) => {
-          if (split.amount > maxAmount) {
-            maxAmount = split.amount;
+        const maxAmount = graphData.reduce((maxAmount, { amount }) => {
+          if (amount > maxAmount) {
+            maxAmount = amount;
           }
           return maxAmount;
         }, 0);
 
-        const svgWidth = splits.length * GRAPH_BAR_WIDTH_IN_PIXELS;
+        const svgWidth = graphData.length * GRAPH_BAR_WIDTH_IN_PIXELS;
         const svgHeight =
           amountToPixels(maxAmount) +
           (AXIS_TEXT_SIZE_IN_PIXELS + AXIS_TEXT_MARGIN_IN_PIXELS);
@@ -698,8 +716,8 @@
           .querySelectorAll("& > rect")
           .forEach((rect) => svg.removeChild(rect));
         // draw graph, 1 <rect> per split
-        for (let i = 0; i < splits.length; i += 1) {
-          const split = splits[i];
+        for (let i = 0; i < graphData.length; i += 1) {
+          const split = graphData[i];
 
           const x = dateToPixels(i);
           const y = amountToPixels(maxAmount - split.amount);
@@ -1007,6 +1025,152 @@
       });
 
       load(readAppState("debits"));
+
+      function runTests() {
+        function equals(a, b) {
+          function replacer(_, value) {
+            return value instanceof Set ? [...value] : value;
+          }
+          return JSON.stringify(a, replacer) === JSON.stringify(b, replacer);
+        }
+
+        let expected = [
+          { tag: "one", count: 2 },
+          { tag: "two", count: 1 },
+          { tag: "three", count: 1 },
+        ];
+        let result = getTagCounts([
+          { splits: [{ tags: ["one", "two"] }] },
+          { splits: [{ tags: ["one", "three"] }] },
+        ]);
+        if (!equals(expected, result)) {
+          console.error("getTagCounts() test failed", expected, result);
+        }
+
+        if (
+          sortByAscendingDate(
+            { date: "2025-04-19" },
+            { date: "2025-04-20" }
+          ) !== -1
+        ) {
+          console.error("sortByAscendingDate() test 1 failed");
+        }
+        if (
+          sortByAscendingDate(
+            { date: "2025-04-20" },
+            { date: "2025-04-19" }
+          ) !== 1
+        ) {
+          console.error("sortByAscendingDate() test 2 failed");
+        }
+        if (
+          sortByAscendingDate(
+            { date: "2025-04-20" },
+            { date: "2025-04-20" }
+          ) !== 0
+        ) {
+          console.error("sortByAscendingDate() test 3 failed");
+        }
+
+        expected = [
+          {
+            date: "2025-04-17",
+            amount: 0,
+            notes: [],
+          },
+          {
+            date: "2025-04-18",
+            amount: 1,
+            notes: ["a"],
+          },
+          {
+            date: "2025-04-19",
+            amount: 5,
+            notes: ["b", "c"],
+          },
+          {
+            date: "2025-04-20",
+            amount: 4,
+            notes: ["d"],
+          },
+        ];
+        result = getDailyGraphData(
+          [
+            {
+              date: "2025-04-17",
+              description: "abc def",
+              splits: [{ tags: ["tag3"] }],
+            },
+            {
+              date: "2025-04-18",
+              description: "abc keyword1 def",
+              splits: [{ amount: "1", tags: ["tag3"], notes: "a" }],
+            },
+            {
+              date: "2025-04-19",
+              description: "abc KEYWORD2 def",
+              splits: [
+                { amount: "2", tags: ["tag3"], notes: "b" },
+                { amount: "3", tags: ["tag1"], notes: "c" },
+              ],
+            },
+            {
+              date: "2025-04-20",
+              description: "abc def",
+              splits: [{ amount: "4", tags: ["tag1"], notes: "d" }],
+            },
+          ],
+          ["keyword1", "keyword2"],
+          ["tag1", "tag2"]
+        );
+        if (!equals(expected, result)) {
+          console.error("getDailyGraphData() test failed", expected, result);
+        }
+
+        expected = [
+          { date: "2025-03", amount: 1, notes: ["a"] },
+          { date: "2025-04", amount: 5, notes: ["b", "c"] },
+        ];
+        result = getMonthlyGraphData([
+          {
+            date: "2025-03-17",
+            amount: 0,
+            notes: [],
+          },
+          {
+            date: "2025-03-18",
+            amount: 1,
+            notes: ["a"],
+          },
+          {
+            date: "2025-04-19",
+            amount: 2,
+            notes: ["b", "c"],
+          },
+          {
+            date: "2025-04-20",
+            amount: 3,
+            notes: [],
+          },
+        ]);
+        if (!equals(expected, result)) {
+          console.error("getMonthlyGraphData() test failed", expected, result);
+        }
+
+        expected = [
+          { year: "2025", amount: 1, months: new Set(["03", "04"]) },
+          { year: "2026", amount: 2, months: new Set(["01"]) },
+        ];
+        result = getAmountsByYear([
+          { date: "2025-03", amount: 0 },
+          { date: "2025-04", amount: 1 },
+          { date: "2026-01", amount: 2 },
+        ]);
+        if (!equals(expected, result)) {
+          console.error("getAmountsByYear() test failed", expected, result);
+        }
+      }
+      runTests();
     </script>
   </body>
 </html>
