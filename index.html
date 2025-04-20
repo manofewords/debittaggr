@@ -431,12 +431,12 @@
         const daysCount =
           (endTimestamp - startTimestamp) / MILLISECONDS_PER_DAY;
 
-        const splitsMap = {};
+        const graphData = {};
         for (let i = 0; i <= daysCount; i += 1) {
           const date = new Date(startTimestamp + i * MILLISECONDS_PER_DAY)
             .toISOString()
             .substring(0, 10);
-          splitsMap[date] = {
+          graphData[date] = {
             date,
             amount: 0,
             notes: [],
@@ -453,14 +453,14 @@
               split.tags.length > 0 &&
               split.tags.every((splitTag) => tags.includes(splitTag));
             if (splitIncludesTags || debitIncludesKeywords) {
-              splitsMap[debit.date].amount += Number(split.amount);
+              graphData[debit.date].amount += Number(split.amount);
               if (split.notes.length > 0) {
-                splitsMap[debit.date].notes.push(split.notes);
+                graphData[debit.date].notes.push(split.notes);
               }
             }
           }
         }
-        return Object.values(splitsMap);
+        return Object.values(graphData);
       }
 
       // total amount of all splits for a month:
@@ -470,23 +470,23 @@
       //   notes: string[] // ["note 1", "note 2"]
       // }[]
       function getMonthlyGraphData(dailyGraphData) {
-        const monthlySplitsMap = {};
-        for (const graphData of dailyGraphData) {
-          const month = graphData.date.substring(0, 7);
-          if (monthlySplitsMap[month]) {
-            monthlySplitsMap[month].amount += graphData.amount;
-            if (graphData.notes.length > 0) {
-              monthlySplitsMap[month].notes.push(...graphData.notes);
+        const monthlyGraphData = {};
+        for (const graphDataItem of dailyGraphData) {
+          const month = graphDataItem.date.substring(0, 7);
+          if (monthlyGraphData[month]) {
+            monthlyGraphData[month].amount += graphDataItem.amount;
+            if (graphDataItem.notes.length > 0) {
+              monthlyGraphData[month].notes.push(...graphDataItem.notes);
             }
           } else {
-            monthlySplitsMap[month] = {
+            monthlyGraphData[month] = {
               date: month,
-              amount: graphData.amount,
-              notes: graphData.notes,
+              amount: graphDataItem.amount,
+              notes: graphDataItem.notes,
             };
           }
         }
-        return Object.values(monthlySplitsMap);
+        return Object.values(monthlyGraphData);
       }
 
       function drawGraphAndStatistics(
@@ -531,16 +531,16 @@
       // }[]
       function getAmountsByYear(monthlyGraphData) {
         return Object.values(
-          monthlyGraphData.reduce((amountsByYear, graphData) => {
-            const year = graphData.date.substring(0, 4);
-            const month = graphData.date.substring(5, 7);
+          monthlyGraphData.reduce((amountsByYear, graphDataItem) => {
+            const year = graphDataItem.date.substring(0, 4);
+            const month = graphDataItem.date.substring(5, 7);
             if (amountsByYear[year]) {
-              amountsByYear[year].amount += graphData.amount;
+              amountsByYear[year].amount += graphDataItem.amount;
               amountsByYear[year].months.add(month);
             } else {
               amountsByYear[year] = {
                 year,
-                amount: graphData.amount,
+                amount: graphDataItem.amount,
                 months: new Set([month]),
               };
             }
@@ -589,7 +589,7 @@
         const AXIS_TEXT_MARGIN_IN_PIXELS = 2;
         const AXIS_TEXT_SIZE_IN_PIXELS = 12; // SVG text size in CSS
 
-        let xAxisLabels; // { label: string, index: number }[] where index is the index of the label in splits
+        let xAxisLabels; // { label: string, index: number }[] where index is the index of the label in graphData
         let yAxisResolutionInCHF; // a horizontal line will be drawn at each multiple of this y value
         let startDate = graphData[0].date;
         if (startDate.length === 10) {
@@ -715,14 +715,14 @@
         svg
           .querySelectorAll("& > rect")
           .forEach((rect) => svg.removeChild(rect));
-        // draw graph, 1 <rect> per split
+        // draw graph, 1 <rect> per graphData item
         for (let i = 0; i < graphData.length; i += 1) {
-          const split = graphData[i];
+          const graphDataItem = graphData[i];
 
           const x = dateToPixels(i);
-          const y = amountToPixels(maxAmount - split.amount);
+          const y = amountToPixels(maxAmount - graphDataItem.amount);
           const width = GRAPH_BAR_WIDTH_IN_PIXELS;
-          const height = amountToPixels(split.amount);
+          const height = amountToPixels(graphDataItem.amount);
 
           const rect = svg.querySelector("defs > rect").cloneNode(true);
 
@@ -732,9 +732,9 @@
           rect.setAttribute("height", height);
 
           rect.querySelector("title").textContent =
-            split.amount / CENTS_IN_ONE_CHF +
-            (split.notes?.length
-              ? " = " + split.notes.filter((note) => !!note).join(" + ")
+            graphDataItem.amount / CENTS_IN_ONE_CHF +
+            (graphDataItem.notes?.length
+              ? " = " + graphDataItem.notes.filter((note) => !!note).join(" + ")
               : "");
 
           svg.appendChild(rect);
