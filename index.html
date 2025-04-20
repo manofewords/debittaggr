@@ -108,7 +108,6 @@
         line {
           stroke: grey;
           stroke-width: 1;
-          stroke-dasharray: 5;
         }
         text {
           font-size: 12px;
@@ -586,8 +585,9 @@
 
         const GRAPH_BAR_WIDTH_IN_PIXELS = 5;
         const CENTS_HEIGHT_IN_PIXELS = 0.01; // 1 CHF = 1 pixel
-        const AXIS_TEXT_MARGIN_IN_PIXELS = 2;
+        const AXIS_TICK_SIZE = 2;
         const AXIS_TEXT_SIZE_IN_PIXELS = 12; // SVG text size in CSS
+        const X0 = 35;
 
         let xAxisLabels; // { label: string, index: number }[] where index is the index of the label in graphData
         let yAxisResolutionInCHF; // a horizontal line will be drawn at each multiple of this y value
@@ -627,7 +627,7 @@
         }
 
         function dateToPixels(index) {
-          return index * GRAPH_BAR_WIDTH_IN_PIXELS;
+          return X0 + index * GRAPH_BAR_WIDTH_IN_PIXELS;
         }
 
         function amountToPixels(amount) {
@@ -640,20 +640,39 @@
           }
           return maxAmount;
         }, 0);
+        const yMax = Math.ceil(amountToPixels(maxAmount));
 
-        const svgWidth = graphData.length * GRAPH_BAR_WIDTH_IN_PIXELS;
-        const svgHeight =
-          amountToPixels(maxAmount) +
-          (AXIS_TEXT_SIZE_IN_PIXELS + AXIS_TEXT_MARGIN_IN_PIXELS);
+        const svgWidth = X0 + graphData.length * GRAPH_BAR_WIDTH_IN_PIXELS;
+        const svgHeight = yMax + (AXIS_TEXT_SIZE_IN_PIXELS + AXIS_TICK_SIZE);
 
         svg.setAttribute("width", svgWidth);
         svg.setAttribute("height", svgHeight);
         svg.style.width = svgWidth + "px";
         svg.style.height = svgHeight + "px";
 
-        // clear previous x-axis labels
+        // clear previous x and y axis labels
         svg.querySelectorAll("& > g.x-axis").forEach((g) => svg.removeChild(g));
-        // draw x-axis labels
+        svg.querySelectorAll("& > g.y-axis").forEach((g) => svg.removeChild(g));
+
+        // draw x axis
+        let g = svg.querySelector("defs > g.x-axis").cloneNode(true);
+        let line = g.querySelector("line");
+        line.setAttribute("x1", X0 - AXIS_TICK_SIZE);
+        line.setAttribute("y1", yMax);
+        line.setAttribute("x2", svgWidth);
+        line.setAttribute("y2", yMax);
+        svg.appendChild(g);
+
+        // draw y axis
+        g = svg.querySelector("defs > g.y-axis").cloneNode(true);
+        line = g.querySelector("line");
+        line.setAttribute("x1", X0);
+        line.setAttribute("y1", 0);
+        line.setAttribute("x2", X0);
+        line.setAttribute("y2", yMax);
+        svg.appendChild(g);
+
+        // draw x axis labels
         for (let i = 0; i < xAxisLabels.length; i += 1) {
           const { index, label } = xAxisLabels[i];
 
@@ -663,29 +682,22 @@
 
           const line = g.querySelector("line");
           line.setAttribute("x1", x);
-          line.setAttribute("y1", amountToPixels(maxAmount));
+          line.setAttribute("y1", yMax);
           line.setAttribute("x2", x);
-          line.setAttribute(
-            "y2",
-            amountToPixels(maxAmount) + AXIS_TEXT_MARGIN_IN_PIXELS
-          );
+          line.setAttribute("y2", yMax + AXIS_TICK_SIZE);
 
           const text = g.querySelector("text");
           text.setAttribute("x", x);
           text.setAttribute(
             "y",
-            amountToPixels(maxAmount) +
-              AXIS_TEXT_SIZE_IN_PIXELS +
-              AXIS_TEXT_MARGIN_IN_PIXELS
+            yMax + AXIS_TEXT_SIZE_IN_PIXELS + AXIS_TICK_SIZE
           );
           text.textContent = label;
 
           svg.appendChild(g);
         }
 
-        // clear previous y-axis labels and lines
-        svg.querySelectorAll("& > g.y-axis").forEach((g) => svg.removeChild(g));
-        // draw y-axis labels and lines
+        // draw y axis labels and lines
         for (
           let i = 1;
           i < Math.ceil(maxAmount / (yAxisResolutionInCHF * CENTS_IN_ONE_CHF));
@@ -698,14 +710,15 @@
           );
 
           const line = g.querySelector("line");
-          line.setAttribute("x1", 0);
+          line.setAttribute("x1", X0 - AXIS_TICK_SIZE);
           line.setAttribute("y1", y);
           line.setAttribute("x2", svgWidth);
           line.setAttribute("y2", y);
+          line.setAttribute("stroke-dasharray", 5);
 
           const text = g.querySelector("text");
           text.setAttribute("x", 0);
-          text.setAttribute("y", y - AXIS_TEXT_MARGIN_IN_PIXELS);
+          text.setAttribute("y", y - AXIS_TICK_SIZE);
           text.textContent = i * yAxisResolutionInCHF;
 
           svg.appendChild(g);
