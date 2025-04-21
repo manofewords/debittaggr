@@ -256,6 +256,19 @@
         </svg>
       </section>
     </aside>
+    <svg id="test-graph" style="display: hidden">
+      <defs>
+        <rect><title></title></rect>
+        <g class="y-axis">
+          <line />
+          <text />
+        </g>
+        <g class="x-axis">
+          <line />
+          <text />
+        </g>
+      </defs>
+    </svg>
     <template id="split">
       <fieldset>
         <label for="split-n-amount">Amount</label>
@@ -1182,6 +1195,44 @@
         if (!equals(expected, result)) {
           console.error("getAmountsByYear() test failed", expected, result);
         }
+
+        const svg = document.querySelector("#test-graph");
+        drawGraph(svg, [
+          {
+            date: "2025-04-17",
+            amount: 0,
+            notes: [],
+          },
+          {
+            date: "2025-04-18",
+            amount: 1000,
+            notes: ["a"],
+          },
+          {
+            date: "2025-04-19",
+            amount: 5000,
+            notes: ["b", "c"],
+          },
+          {
+            date: "2025-04-20",
+            amount: 4000,
+            notes: ["d"],
+          },
+        ]);
+        expected =
+          '<defs><rect><title></title></rect><g class="y-axis"><line></line><text></text></g><g class="x-axis"><line></line><text></text></g></defs>' + 
+          '<g class="x-axis"><line x1="33" y1="50" x2="55" y2="50"></line><text></text></g>' + 
+          '<g class="y-axis"><line x1="35" y1="0" x2="35" y2="50"></line><text></text></g>' + 
+          '<g class="x-axis"><line x1="35" y1="50" x2="35" y2="52"></line><text x="35" y="64">2025-04</text></g>' + 
+          '<rect x="35" y="50" width="5" height="0"><title>0</title></rect>' + 
+          '<rect x="40" y="40" width="5" height="10"><title>10 = a</title></rect>' + 
+          '<rect x="45" y="0" width="5" height="50"><title>50 = b + c</title></rect>' + 
+          '<rect x="50" y="10" width="5" height="40"><title>40 = d</title></rect>';
+        result = svg.innerHTML.replaceAll(/\s{2,}/g, "");
+        if (expected !== result) {
+          console.error("drawGraph() test failed", expected, result);
+        }
+        svg.innerHTML = "";
       }
       runTests();
     </script>
