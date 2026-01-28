@@ -116,7 +116,7 @@
         position: relative;
         overflow: auto;
         rect {
-          fill: green;
+          fill: darkviolet;
           opacity: 0.9;
         }
         line {
@@ -216,6 +216,7 @@
           id="tags"
           name="tags"
           multiple
+          size="10"
           onchange="drawGraphAndStatistics(this.selectedOptions, document.querySelector('#keywords').value)"
         ></select>
         <label for="keywords">Keywords</label>
@@ -237,6 +238,22 @@
           </thead>
           <tbody></tbody>
         </table>
+      </section>
+      <section class="graph">
+        <h2>Yearly graph</h2>
+        <svg id="yearly-graph">
+          <defs>
+            <rect><title></title></rect>
+            <g class="y-axis">
+              <line />
+              <text />
+            </g>
+            <g class="x-axis">
+              <line />
+              <text />
+            </g>
+          </defs>
+        </svg>
       </section>
       <section class="graph">
         <h2>Monthly graph</h2>
@@ -338,6 +355,14 @@
         tagCounts: [], // { tag: string, count: number }
       };
 
+      const GRAPH_PARAMETERS = {
+        graphBarWidthInPixels: 5,
+        centsHeightInPixels: 0.01, // 1 CHF = 1 pixel
+        axisTickSize: 2,
+        axisTextSizeInPixels: 12, // SVG text size in CSS
+        x0: 35,
+      };
+
       function readAppState(key) {
         return appState[key];
       }
@@ -367,7 +392,7 @@
               }
             }
             return tagCounts;
-          }, {})
+          }, {}),
         ).sort((a, b) => b.count - a.count);
       }
 
@@ -404,11 +429,7 @@
 
         // create <select>'s <option>s
         for (let i = 0; i < tagCounts.length; i += 1) {
-          appendOptionToTagSelector(
-            tagCounts[i].tag,
-            tagCounts[i].tag,
-            i === 0
-          );
+          appendOptionToTagSelector(tagCounts[i].tag, tagCounts[i].tag, i === 0);
         }
 
         // show graph and statistics of most used tag by default
@@ -455,8 +476,7 @@
       function getDailyGraphData(debits, keywords, tags) {
         const startTimestamp = Date.parse(debits[0].date);
         const endTimestamp = Date.parse(debits[debits.length - 1].date);
-        const daysCount =
-          (endTimestamp - startTimestamp) / MILLISECONDS_PER_DAY;
+        const daysCount = (endTimestamp - startTimestamp) / MILLISECONDS_PER_DAY;
 
         const graphData = {};
         for (let i = 0; i <= daysCount; i += 1) {
@@ -490,7 +510,7 @@
         return Object.values(graphData);
       }
 
-      // total amount of all splits for a month:
+      // total amount of all splits for every month:
       // {
       //   date: string, // "2021-04"
       //   amount: number // in cents
@@ -516,10 +536,38 @@
         return Object.values(monthlyGraphData);
       }
 
-      function drawGraphAndStatistics(
-        selectedTagOptions,
-        selectedKeywords = ""
-      ) {
+      // total amount of all splits for every year:
+      // {
+      //   date: string, // "2018"
+      //   amount: number, // in cents
+      //   notes: string[] // ["note 1", "note 2"]
+      //   months: Set<string> // ["01", "02", …]
+      // }[]
+      function getYearlyGraphData(monthlyGraphData) {
+        return Object.values(
+          monthlyGraphData.reduce((yearlyGraphData, graphDataItem) => {
+            const year = graphDataItem.date.substring(0, 4);
+            const month = graphDataItem.date.substring(5, 7);
+            if (yearlyGraphData[year]) {
+              yearlyGraphData[year].amount += graphDataItem.amount;
+              if (graphDataItem.notes.length > 0) {
+                yearlyGraphData[year].notes.push(...graphDataItem.notes);
+              }
+              yearlyGraphData[year].months.add(month);
+            } else {
+              yearlyGraphData[year] = {
+                date: year,
+                amount: graphDataItem.amount,
+                notes: graphDataItem.notes,
+                months: new Set([month]),
+              };
+            }
+            return yearlyGraphData;
+          }, {}),
+        );
+      }
+
+      function drawGraphAndStatistics(selectedTagOptions, selectedKeywords = "") {
         const tags = Array.from(selectedTagOptions)
           .map(({ value }) => value)
           .filter((tag) => !!tag);
@@ -530,92 +578,53 @@
         const debits = readAppState("debits");
 
         const dailyGraphData = getDailyGraphData(debits, keywords, tags);
+        const monthlyGraphData = getMonthlyGraphData(dailyGraphData);
+        const yearlyGraphData = getYearlyGraphData(monthlyGraphData);
 
-        let svg = document.querySelector("#monthly-graph");
-        drawMonthlyGraphAndStatistics(svg, dailyGraphData);
+        let svg = document.querySelector("#yearly-graph");
+        drawGraph(svg, yearlyGraphData, {
+          ...GRAPH_PARAMETERS,
+          graphBarWidthInPixels: 40,
+          centsHeightInPixels: 0.0005,
+        });
+
+        svg = document.querySelector("#monthly-graph");
+        drawGraph(svg, monthlyGraphData, GRAPH_PARAMETERS);
+        drawMonthlyStatistics(yearlyGraphData);
 
         svg = document.querySelector("#daily-graph");
-        drawGraph(svg, dailyGraphData);
+        drawGraph(svg, dailyGraphData, GRAPH_PARAMETERS);
       }
 
-      function drawMonthlyGraphAndStatistics(svg, dailyGraphData) {
-        if (dailyGraphData.length < 1) {
-          return;
-        }
-
-        const monthlyGraphData = getMonthlyGraphData(dailyGraphData);
-
-        drawGraph(svg, monthlyGraphData);
-
-        drawMonthlyStatistics(monthlyGraphData);
-      }
-
-      // total amount for each year:
-      // {
-      //   year: string, // "2018"
-      //   amount: number, // in cents
-      //   months: Set<string> // ["01", "02", …]
-      // }[]
-      function getAmountsByYear(monthlyGraphData) {
-        return Object.values(
-          monthlyGraphData.reduce((amountsByYear, graphDataItem) => {
-            const year = graphDataItem.date.substring(0, 4);
-            const month = graphDataItem.date.substring(5, 7);
-            if (amountsByYear[year]) {
-              amountsByYear[year].amount += graphDataItem.amount;
-              amountsByYear[year].months.add(month);
-            } else {
-              amountsByYear[year] = {
-                year,
-                amount: graphDataItem.amount,
-                months: new Set([month]),
-              };
-            }
-            return amountsByYear;
-          }, {})
-        );
-      }
-
-      function drawMonthlyStatistics(monthlyGraphData) {
-        const amountsByYear = getAmountsByYear(monthlyGraphData);
-
-        const tableBody = document.querySelector(
-          "table#monthly-averages > tbody"
-        );
+      function drawMonthlyStatistics(yearlyGraphData) {
+        const tableBody = document.querySelector("table#monthly-averages > tbody");
 
         // clear the table content
         tableBody.innerHTML = "";
 
-        const monthlyTableRowTemplate =
-          document.querySelector("#monthly-table-row");
+        const monthlyTableRowTemplate = document.querySelector("#monthly-table-row");
 
         // add 1 row per year to the table
-        for (const amountByYear of amountsByYear) {
+        for (const amountByYear of yearlyGraphData) {
           const monthlyAverage = Math.round(
-            amountByYear.amount / CENTS_IN_ONE_CHF / amountByYear.months.size
+            amountByYear.amount / CENTS_IN_ONE_CHF / amountByYear.months.size,
           );
 
           const monthlyTableRowClone =
             monthlyTableRowTemplate.content.cloneNode(true);
 
           const cells = monthlyTableRowClone.querySelectorAll("td");
-          cells[0].textContent = amountByYear.year;
+          cells[0].textContent = amountByYear.date;
           cells[1].textContent = monthlyAverage;
 
           tableBody.appendChild(monthlyTableRowClone);
         }
       }
 
-      function drawGraph(svg, graphData) {
+      function drawGraph(svg, graphData, graphParameters) {
         if (!svg || graphData.length < 1) {
           return;
         }
-
-        const GRAPH_BAR_WIDTH_IN_PIXELS = 5;
-        const CENTS_HEIGHT_IN_PIXELS = 0.01; // 1 CHF = 1 pixel
-        const AXIS_TICK_SIZE = 2;
-        const AXIS_TEXT_SIZE_IN_PIXELS = 12; // SVG text size in CSS
-        const X0 = 35;
 
         let xAxisLabels; // { label: string, index: number }[] where index is the index of the label in graphData
         let yAxisResolutionInCHF; // a horizontal line will be drawn at each multiple of this y value
@@ -632,7 +641,7 @@
                 };
               }
               return xAxisLabels;
-            }, {})
+            }, {}),
           );
           yAxisResolutionInCHF = 50;
         } else if (startDate.length === 7) {
@@ -647,19 +656,34 @@
                 };
               }
               return xAxisLabels;
-            }, {})
+            }, {}),
           );
           yAxisResolutionInCHF = 100;
+        } else if (startDate.length === 4) {
+          // yearly mode
+          xAxisLabels = Object.values(
+            graphData.reduce((xAxisLabels, { date }, index) => {
+              const label = date; // year
+              if (!xAxisLabels[label]) {
+                xAxisLabels[label] = {
+                  label,
+                  index,
+                };
+              }
+              return xAxisLabels;
+            }, {}),
+          );
+          yAxisResolutionInCHF = 1000;
         } else {
           return;
         }
 
         function dateToPixels(index) {
-          return X0 + index * GRAPH_BAR_WIDTH_IN_PIXELS;
+          return graphParameters.x0 + index * graphParameters.graphBarWidthInPixels;
         }
 
         function amountToPixels(amount) {
-          return amount * CENTS_HEIGHT_IN_PIXELS;
+          return amount * graphParameters.centsHeightInPixels;
         }
 
         const maxAmount = graphData.reduce((maxAmount, { amount }) => {
@@ -670,8 +694,12 @@
         }, 0);
         const yMax = Math.ceil(amountToPixels(maxAmount));
 
-        const svgWidth = X0 + graphData.length * GRAPH_BAR_WIDTH_IN_PIXELS;
-        const svgHeight = yMax + (AXIS_TEXT_SIZE_IN_PIXELS + AXIS_TICK_SIZE);
+        const svgWidth =
+          graphParameters.x0 +
+          graphData.length * graphParameters.graphBarWidthInPixels;
+        const svgHeight =
+          yMax +
+          (graphParameters.axisTextSizeInPixels + graphParameters.axisTickSize);
 
         svg.setAttribute("width", svgWidth);
         svg.setAttribute("height", svgHeight);
@@ -685,7 +713,7 @@
         // draw x axis
         let g = svg.querySelector("defs > g.x-axis").cloneNode(true);
         let line = g.querySelector("line");
-        line.setAttribute("x1", X0 - AXIS_TICK_SIZE);
+        line.setAttribute("x1", graphParameters.x0 - graphParameters.axisTickSize);
         line.setAttribute("y1", yMax);
         line.setAttribute("x2", svgWidth);
         line.setAttribute("y2", yMax);
@@ -694,9 +722,9 @@
         // draw y axis
         g = svg.querySelector("defs > g.y-axis").cloneNode(true);
         line = g.querySelector("line");
-        line.setAttribute("x1", X0);
+        line.setAttribute("x1", graphParameters.x0);
         line.setAttribute("y1", 0);
-        line.setAttribute("x2", X0);
+        line.setAttribute("x2", graphParameters.x0);
         line.setAttribute("y2", yMax);
         svg.appendChild(g);
 
@@ -712,13 +740,15 @@
           line.setAttribute("x1", x);
           line.setAttribute("y1", yMax);
           line.setAttribute("x2", x);
-          line.setAttribute("y2", yMax + AXIS_TICK_SIZE);
+          line.setAttribute("y2", yMax + graphParameters.axisTickSize);
 
           const text = g.querySelector("text");
           text.setAttribute("x", x);
           text.setAttribute(
             "y",
-            yMax + AXIS_TEXT_SIZE_IN_PIXELS + AXIS_TICK_SIZE
+            yMax +
+              graphParameters.axisTextSizeInPixels +
+              graphParameters.axisTickSize,
           );
           text.textContent = label;
 
@@ -734,11 +764,11 @@
           const g = svg.querySelector("defs > g.y-axis").cloneNode(true);
 
           const y = amountToPixels(
-            maxAmount - i * (yAxisResolutionInCHF * CENTS_IN_ONE_CHF)
+            maxAmount - i * (yAxisResolutionInCHF * CENTS_IN_ONE_CHF),
           );
 
           const line = g.querySelector("line");
-          line.setAttribute("x1", X0 - AXIS_TICK_SIZE);
+          line.setAttribute("x1", graphParameters.x0 - graphParameters.axisTickSize);
           line.setAttribute("y1", y);
           line.setAttribute("x2", svgWidth);
           line.setAttribute("y2", y);
@@ -746,23 +776,21 @@
 
           const text = g.querySelector("text");
           text.setAttribute("x", 0);
-          text.setAttribute("y", y - AXIS_TICK_SIZE);
+          text.setAttribute("y", y - graphParameters.axisTickSize);
           text.textContent = i * yAxisResolutionInCHF;
 
           svg.appendChild(g);
         }
 
         // clear previous graph
-        svg
-          .querySelectorAll("& > rect")
-          .forEach((rect) => svg.removeChild(rect));
+        svg.querySelectorAll("& > rect").forEach((rect) => svg.removeChild(rect));
         // draw graph, 1 <rect> per graphData item
         for (let i = 0; i < graphData.length; i += 1) {
           const graphDataItem = graphData[i];
 
           const x = dateToPixels(i);
           const y = amountToPixels(maxAmount - graphDataItem.amount);
-          const width = GRAPH_BAR_WIDTH_IN_PIXELS;
+          const width = graphParameters.graphBarWidthInPixels;
           const height = amountToPixels(graphDataItem.amount);
 
           const rect = svg.querySelector("defs > rect").cloneNode(true);
@@ -814,11 +842,9 @@
 
       function exportToJsonFile() {
         const debits = readAppState("debits");
-        const filename = `debittaggr-${
-          new Date().toISOString().split(".")[0]
-        }.json`;
+        const filename = `debittaggr-${new Date().toISOString().split(".")[0]}.json`;
         const href = `data:text/json;charset=utf-8,${encodeURIComponent(
-          JSON.stringify(debits, null, 2)
+          JSON.stringify(debits, null, 2),
         )}`;
         const temporaryElement = document.createElement("a");
         temporaryElement.setAttribute("href", href);
@@ -839,7 +865,7 @@
           .map((row) => {
             const unescaped = row.replaceAll(
               /"(.+?)";/g,
-              (match, p1) => p1.replaceAll(delimiter, " ") + delimiter
+              (match, p1) => p1.replaceAll(delimiter, " ") + delimiter,
             );
             const values = unescaped.split(delimiter);
             if (values.length !== 15) {
@@ -869,9 +895,7 @@
         const splitTemplate = document.querySelector("#split");
         const splitClone = splitTemplate.content.cloneNode(true);
 
-        splitClone
-          .querySelector("fieldset")
-          .setAttribute("id", `split-${index}`);
+        splitClone.querySelector("fieldset").setAttribute("id", `split-${index}`);
 
         let identifier = `split-${index}-amount`;
 
@@ -879,9 +903,7 @@
           .querySelector('label[for="split-n-amount"]')
           .setAttribute("for", identifier);
 
-        const amountInput = splitClone.querySelector(
-          'input[name="split-n-amount"]'
-        );
+        const amountInput = splitClone.querySelector('input[name="split-n-amount"]');
         amountInput.setAttribute("id", identifier);
         amountInput.setAttribute("name", identifier);
         amountInput.value = split.amount;
@@ -895,9 +917,7 @@
           .querySelector('label[for="split-n-notes"]')
           .setAttribute("for", identifier);
 
-        const notesInput = splitClone.querySelector(
-          'textarea[name="split-n-notes"]'
-        );
+        const notesInput = splitClone.querySelector('textarea[name="split-n-notes"]');
         notesInput.setAttribute("id", identifier);
         notesInput.setAttribute("name", identifier);
         notesInput.value = split.notes;
@@ -935,7 +955,7 @@
         }
 
         const newTagsInput = tagsContainer.querySelector(
-          'input[name="split-n-new-tags"]'
+          'input[name="split-n-new-tags"]',
         );
         newTagsInput.setAttribute("name", `split-${index}-new-tags`);
         newTagsInput.addEventListener("blur", (event) => {
@@ -1005,9 +1025,7 @@
 
         const sortedDebits = debits.sort(sortByAscendingDate);
 
-        let index = sortedDebits.findIndex(
-          (debit) => debit.splits.length === 0
-        );
+        let index = sortedDebits.findIndex((debit) => debit.splits.length === 0);
         if (index === -1) {
           index = 0;
         }
@@ -1032,7 +1050,7 @@
               debit.splits.reduce((splitAmount, split) => {
                 splitAmount += Number(split.amount);
                 return splitAmount;
-              }, 0)
+              }, 0),
           ),
           notes: "",
           tags: [],
@@ -1044,7 +1062,7 @@
       }
 
       const existingDataFileSelector = document.querySelector(
-        'input[name="existing-data"]'
+        'input[name="existing-data"]',
       );
       existingDataFileSelector.addEventListener("change", (event) => {
         readExistingData(event.target.files[0], (data) => {
@@ -1054,9 +1072,7 @@
         });
       });
 
-      const newDataFileSelector = document.querySelector(
-        'input[name="new-data"]'
-      );
+      const newDataFileSelector = document.querySelector('input[name="new-data"]');
       newDataFileSelector.addEventListener("change", (event) => {
         readNewData(event.target.files[0], (data) => {
           const debits = [...readAppState("debits"), ...data];
@@ -1089,26 +1105,17 @@
         }
 
         if (
-          sortByAscendingDate(
-            { date: "2025-04-19" },
-            { date: "2025-04-20" }
-          ) !== -1
+          sortByAscendingDate({ date: "2025-04-19" }, { date: "2025-04-20" }) !== -1
         ) {
           console.error("sortByAscendingDate() test 1 failed");
         }
         if (
-          sortByAscendingDate(
-            { date: "2025-04-20" },
-            { date: "2025-04-19" }
-          ) !== 1
+          sortByAscendingDate({ date: "2025-04-20" }, { date: "2025-04-19" }) !== 1
         ) {
           console.error("sortByAscendingDate() test 2 failed");
         }
         if (
-          sortByAscendingDate(
-            { date: "2025-04-20" },
-            { date: "2025-04-20" }
-          ) !== 0
+          sortByAscendingDate({ date: "2025-04-20" }, { date: "2025-04-20" }) !== 0
         ) {
           console.error("sortByAscendingDate() test 3 failed");
         }
@@ -1162,7 +1169,7 @@
             },
           ],
           ["keyword1", "keyword2"],
-          ["tag1", "tag2"]
+          ["tag1", "tag2"],
         );
         if (!equals(expected, result)) {
           console.error("getDailyGraphData() test failed", expected, result);
@@ -1199,49 +1206,58 @@
         }
 
         expected = [
-          { year: "2025", amount: 1, months: new Set(["03", "04"]) },
-          { year: "2026", amount: 2, months: new Set(["01"]) },
+          {
+            date: "2025",
+            amount: 1,
+            notes: ["a", "b"],
+            months: new Set(["03", "04"]),
+          },
+          { date: "2026", amount: 2, notes: ["c"], months: new Set(["01"]) },
         ];
-        result = getAmountsByYear([
-          { date: "2025-03", amount: 0 },
-          { date: "2025-04", amount: 1 },
-          { date: "2026-01", amount: 2 },
+        result = getYearlyGraphData([
+          { date: "2025-03", amount: 0, notes: [] },
+          { date: "2025-04", amount: 1, notes: ["a", "b"] },
+          { date: "2026-01", amount: 2, notes: ["c"] },
         ]);
         if (!equals(expected, result)) {
-          console.error("getAmountsByYear() test failed", expected, result);
+          console.error("getYearlyGraphData() test failed", expected, result);
         }
 
         const svg = document.querySelector("#test-graph");
-        drawGraph(svg, [
-          {
-            date: "2025-04-17",
-            amount: 0,
-            notes: [],
-          },
-          {
-            date: "2025-04-18",
-            amount: 1000,
-            notes: ["a"],
-          },
-          {
-            date: "2025-04-19",
-            amount: 5000,
-            notes: ["b", "c"],
-          },
-          {
-            date: "2025-04-20",
-            amount: 4000,
-            notes: ["d"],
-          },
-        ]);
+        drawGraph(
+          svg,
+          [
+            {
+              date: "2025-04-17",
+              amount: 0,
+              notes: [],
+            },
+            {
+              date: "2025-04-18",
+              amount: 1000,
+              notes: ["a"],
+            },
+            {
+              date: "2025-04-19",
+              amount: 5000,
+              notes: ["b", "c"],
+            },
+            {
+              date: "2025-04-20",
+              amount: 4000,
+              notes: ["d"],
+            },
+          ],
+          GRAPH_PARAMETERS,
+        );
         expected =
-          '<defs><rect><title></title></rect><g class="y-axis"><line></line><text></text></g><g class="x-axis"><line></line><text></text></g></defs>' + 
-          '<g class="x-axis"><line x1="33" y1="50" x2="55" y2="50"></line><text></text></g>' + 
-          '<g class="y-axis"><line x1="35" y1="0" x2="35" y2="50"></line><text></text></g>' + 
-          '<g class="x-axis"><line x1="35" y1="50" x2="35" y2="52"></line><text x="35" y="64">2025-04</text></g>' + 
-          '<rect x="35" y="50" width="5" height="0"><title>0</title></rect>' + 
-          '<rect x="40" y="40" width="5" height="10"><title>10 = a</title></rect>' + 
-          '<rect x="45" y="0" width="5" height="50"><title>50 = b + c</title></rect>' + 
+          '<defs><rect><title></title></rect><g class="y-axis"><line></line><text></text></g><g class="x-axis"><line></line><text></text></g></defs>' +
+          '<g class="x-axis"><line x1="33" y1="50" x2="55" y2="50"></line><text></text></g>' +
+          '<g class="y-axis"><line x1="35" y1="0" x2="35" y2="50"></line><text></text></g>' +
+          '<g class="x-axis"><line x1="35" y1="50" x2="35" y2="52"></line><text x="35" y="64">2025-04</text></g>' +
+          '<rect x="35" y="50" width="5" height="0"><title>0</title></rect>' +
+          '<rect x="40" y="40" width="5" height="10"><title>10 = a</title></rect>' +
+          '<rect x="45" y="0" width="5" height="50"><title>50 = b + c</title></rect>' +
           '<rect x="50" y="10" width="5" height="40"><title>40 = d</title></rect>';
         result = svg.innerHTML.replaceAll(/\s{2,}/g, "");
         if (expected !== result) {
